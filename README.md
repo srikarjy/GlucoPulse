@@ -159,7 +159,7 @@ TimescaleDB is exposed on host port **5544** (not the default 5432) — this rep
 | Phase | Scope | Status |
 |---|---|---|
 | 1 — Foundation | Docker Compose: all services running with one command | Complete |
-| 2 — Ingestion | Producer → Kafka → Consumer → TimescaleDB + dead letter queue + Grafana | Planned |
+| 2 — Ingestion | Producer → Kafka → Consumer → TimescaleDB + dead letter queue + Grafana | Complete |
 | 3 — Batch + Orchestration | PySpark feature job + Airflow DAGs + data quality gates | Planned |
 | 4 — ML + Serving | TFT training → ONNX export → FastAPI + Grafana RMSE panel | Planned |
 

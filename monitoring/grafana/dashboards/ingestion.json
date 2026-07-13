@@ -1,0 +1,77 @@
+{
+  "id": null,
+  "uid": "glucopulse-ingestion",
+  "title": "GlucoPulse Ingestion",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "patient",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "timescaledb" },
+        "query": "SELECT DISTINCT patient_id FROM cgm_readings ORDER BY 1",
+        "refresh": 2,
+        "sort": 1,
+        "current": {},
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Ingestion Rate (rows/min, wall-clock)",
+      "description": "Rows actually written to cgm_readings per minute, bucketed by ingested_at (when the consumer wrote them) -- not by the sensor's own event time, which is historical AZT1D replay data from Dec 2023-Apr 2024.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time_bucket('1 minute', ingested_at) AS \"time\", count(*) AS rows_ingested FROM cgm_readings WHERE $__timeFilter(ingested_at) GROUP BY 1 ORDER BY 1;",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Glucose Trace -- Patient $patient",
+      "description": "Most recent 500 readings for the selected patient, by sensor event time. Ignores the dashboard time-range picker deliberately -- AZT1D's own timestamps are historical, so this always shows the latest available trace regardless of picker.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "fieldConfig": { "defaults": { "unit": "none", "custom": { "axisLabel": "mg/dL" } } },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT * FROM (SELECT time AS \"time\", glucose_value AS glucose FROM cgm_readings WHERE patient_id = '$patient' ORDER BY time DESC LIMIT 500) sub ORDER BY \"time\" ASC;",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "DLQ Health (events/min by failure class)",
+      "description": "cgm-parse-errors (structural failures), cgm-dlq (conflicting same-timestamp groups, human review), cgm-implausible (CGM <40 or >400 mg/dL). See docs/QUESTIONS.md 2026-07-13 entry.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 8 },
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time_bucket('1 minute', received_at) AS \"time\", topic AS metric, count(*) AS events FROM dlq_events WHERE $__timeFilter(received_at) GROUP BY 1, topic ORDER BY 1;",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

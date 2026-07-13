@@ -78,9 +78,9 @@ AZT1D downloaded into `data/azt1d/` (CC BY 4.0, no application — Mendeley DOI 
 6. **Grafana ingestion dashboard** — live view of `cgm_readings` growing, so "Grafana shows live ingestion" is something you can actually watch, not just infer from logs.
 7. **Verify**: run the full replay for one patient, confirm rows land in TimescaleDB matching the source CSV, deliberately inject one malformed message and confirm it lands in `cgm-dlq` not `cgm-raw`'s consumer path, watch Grafana update live.
 
-### Definition of done for Phase 2
+### Definition of done for Phase 2 — MET (2026-07-13)
 
-- A full replay of at least one patient's real AZT1D data lands correctly in TimescaleDB.
-- The DLQ demonstrably catches a deliberately malformed message — proven by actually sending one, not by code review.
-- Grafana shows live ingestion.
-- Verified by running it end-to-end against real data, same standard as Phase 1.
+- A full replay of at least one patient's real AZT1D data lands correctly in TimescaleDB. ✅ (34,279 rows across 3 patients, zero duplicates)
+- The DLQ demonstrably catches a deliberately malformed message — proven by actually sending one, not by code review. ✅ All three failure classes (`cgm-parse-errors`, `cgm-dlq`, `cgm-implausible`) individually verified with injected messages.
+- Grafana shows live ingestion. ✅ 3-panel dashboard (ingestion rate, per-patient glucose trace, DLQ health), each panel's query verified directly against `/api/ds/query`, not just visually.
+- Verified by running it end-to-end against real data, same standard as Phase 1. Full writeup in `docs/PROGRESS.md` and `docs/QUESTIONS.md`.

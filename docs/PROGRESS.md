@@ -63,7 +63,27 @@ OhioT1DM requires a gated institutional request (~1 week). A single OhioT1DM fil
 - Injected 5 synthetic messages directly onto `cgm-raw`: invalid JSON and a message missing `cgm` both landed in `cgm-parse-errors` with the correct reason string; CGM values of 900 and 5 both landed in `cgm-implausible` and were correctly excluded from `cgm_readings`; a boundary value of exactly 40 (inclusive) was correctly accepted and written.
 - Confirmed via `docker compose ps` that all 4 services (kafka, timescaledb, grafana, consumer) are healthy/up together, consumer under `restart: unless-stopped`.
 
+## Phase 2 — Grafana ingestion dashboard built and verified (2026-07-13), Phase 2 done-gate MET
+
+**Design decision:** DLQ health observability reuses the existing TimescaleDB/Postgres Grafana datasource rather than adding new infrastructure (Prometheus, Kafka JMX exporter) just for topic-level metrics. The consumer now also subscribes to `cgm-dlq` (in addition to `cgm-raw`) purely to log an observability row into a new `dlq_events` table for each of the three failure classes -- it does not touch conflicting-timestamp resolution, which stays human-review-only.
+
+**Built:**
+- `timescaledb/init/003_dlq_events.sql` -- plain (non-hypertable) `dlq_events` log table.
+- `timescaledb/init/004_add_ingested_at.sql` -- added `ingested_at` (wall-clock write time) to `cgm_readings`, since the existing `time` column is the sensor's own historical event timestamp (Dec 2023-Apr 2024) and is the wrong column for a live/real-time panel against Grafana's default now-relative time picker.
+- `consumer/ingest.py` extended to log every parse-error, implausible-value, and cgm-dlq event into `dlq_events`.
+- `monitoring/grafana/dashboards/ingestion.json` + `monitoring/grafana/provisioning/dashboards/dashboards.yml` -- 3-panel dashboard: (1) ingestion rate rows/min by `ingested_at`, (2) per-patient glucose trace templated on `$patient`, deliberately ignoring the dashboard time-range picker (LIMIT-based latest-500 query) since patient data is historical, (3) DLQ health events/min split by topic.
+- Datasource provisioning given an explicit `uid: timescaledb` so dashboard JSON can reference it reliably.
+
+**Bug found and fixed:** the consumer's `docker logs` showed nothing even after processing thousands of messages -- Python buffers stdout when piped (not a TTY), so a long-running process's `print()` never flushed. Added `PYTHONUNBUFFERED=1` to both `consumer/Dockerfile` and `producer/Dockerfile`.
+
+**Verified (not just assumed from reading the JSON):**
+- `GET /api/search` and `/api/dashboards/uid/glucopulse-ingestion` confirm the dashboard is actually provisioned with all 3 panels.
+- Each panel's exact SQL was run through `/api/ds/query` directly: panel 1 (ingestion rate) returned real time-bucketed counts; panel 2 (patient trace) returned exactly 500 rows for patient 1 with real glucose values; panel 3 (DLQ health) correctly split into 3 series (`cgm-dlq`, `cgm-implausible`, `cgm-parse-errors`), confirmed by inspecting the raw Grafana dataframe schema, not just a visual check.
+- Injected fresh synthetic messages across all 3 failure classes (including directly onto `cgm-dlq`, not just `cgm-raw`) after the rebuild; each produced exactly one new `dlq_events` row with the correct topic/patient_id/reason.
+- **Observation (not a bug from today's work):** 15 `cgm-dlq` entries for patient 1 are genuine duplicates in the underlying Kafka topic, from the producer having been run for patient 1 in two separate sessions -- `cgm-dlq` has no dedup the way `cgm_readings` does via its primary key, so re-running the producer for the same patient does append real duplicate conflict messages. Not addressed now; worth knowing if `cgm-dlq` volume ever gets used for a real count-based alert.
+
+**Phase 2 done-gate (docs/BLUEPRINT.md) is now fully met**: real patient replay lands in TimescaleDB, DLQ demonstrably catches deliberately bad messages (all 3 classes, not just one), and Grafana shows live ingestion.
+
 ## Not yet started
 
-- **Phase 2 — remaining:** Grafana ingestion dashboard (live view of `cgm_readings` growing) not yet built — last item for Phase 2's done-gate in `docs/BLUEPRINT.md`.
 - **Phase 3 — Batch + Orchestration**, **Phase 4 — ML + Serving:** not started, depend on Phase 2 completing first per the phase-gating rule in `docs/BLUEPRINT.md`.
