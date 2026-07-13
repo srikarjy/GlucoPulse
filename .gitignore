@@ -1,0 +1,6 @@
+.env
+.DS_Store
+data/azt1d/
+.venv/
+__pycache__/
+*.pyc

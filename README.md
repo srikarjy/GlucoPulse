@@ -15,7 +15,7 @@ GlucoPulse is designed around that constraint: fault-tolerant ingestion, orchest
 ## Architecture
 
 ```
-OhioT1DM XML (dataset replay)
+AZT1D CSV (dataset replay)
          |
  Python Replay Producer
  (simulates sensor at 5s/reading)
@@ -62,7 +62,7 @@ Every component is justified by a specific requirement.
 | **TimescaleDB** | `time_bucket()` and continuous aggregates for rolling glucose windows; hypertable partitioning for time-range queries; native Grafana data source |
 | **PySpark** | Batch feature engineering across all patients' full history is a legitimate distributed workload — runs on training path, not hot path |
 | **Airflow** | Retry logic, SLA alerting, and data-quality-gated job dependencies — none of which exist in cron |
-| **TFT (PyTorch)** | OhioT1DM includes meal/insulin covariates that feed TFT's known-future and past-observed input channels; designed for multi-horizon probabilistic forecasting |
+| **TFT (PyTorch)** | AZT1D includes bolus/basal/carb covariates that feed TFT's known-future and past-observed input channels; designed for multi-horizon probabilistic forecasting |
 | **ONNX + FastAPI** | Portable model artifact served via REST; decouples inference runtime from PyTorch training environment |
 | **Grafana** | A pipeline without monitoring does not exist in production |
 
@@ -70,11 +70,15 @@ Every component is justified by a specific requirement.
 
 ## Data Source
 
-**OhioT1DM Dataset** — 12 Type 1 diabetes patients, ~8 weeks each, 5-minute CGM intervals.
+**AZT1D Dataset** — 25 Type 1 diabetes patients on automated insulin delivery systems, 28–49 days per patient (avg ~42 days / ~6 weeks), 5-minute CGM intervals (Dexcom G6 Pro), **306,712 total CGM readings** (measured directly from the downloaded files — the paper's abstract cites 320,488, but the real files don't match that; see `docs/QUESTIONS.md`). Collected at Mayo Clinic Scottsdale, Dec 2023–Apr 2024 (Arizona State University / Mayo Clinic Arizona; arXiv:2506.14789).
 
-Covariates: CGM glucose (mg/dL), meal events + carbohydrate amounts, insulin bolus doses, basal insulin rates, exercise events, fingerstick readings.
+Covariates: CGM glucose (mg/dL), bolus insulin (total dose, bolus type, correction amounts), basal insulin rate, carbohydrate intake, device mode (sleep/exercise — otherwise blank/regular).
 
-Access requires a brief application: http://smarthealth.cs.ohio.edu/OhioT1DM-dataset.html
+Openly licensed (CC BY 4.0), no application required: Mendeley Data, DOI [10.17632/gk9m674wcx.1](https://data.mendeley.com/datasets/gk9m674wcx/1). CSV format, one file per subject.
+
+Known data-quality issue (measured, not assumed): `EventDateTime` is a per-second event log, not a clean 5-minute grid — 823 (patient, timestamp) pairs across the dataset have more than one row. 429 are exact duplicates (silently deduplicated); 394 have genuinely conflicting values (e.g. two different CGM readings at the same second) and are routed to `cgm-dlq` rather than silently resolved. Real sensor gaps up to 23 hours also observed.
+
+(Originally scoped around OhioT1DM, which requires a gated institutional request. Switched to AZT1D to remove that external dependency and its redistribution/provenance ambiguity — same 5-minute CGM cadence, more patients. See `docs/QUESTIONS.md` for the full decision writeup.)
 
 ---
 
@@ -82,7 +86,7 @@ Access requires a brief application: http://smarthealth.cs.ohio.edu/OhioT1DM-dat
 
 Predict glucose value at **T+30 minutes** and **T+60 minutes**.
 
-**Baseline:** Persistence model — predict the last known value. At T+30, this achieves ~15–25 mg/dL RMSE on OhioT1DM. Every model is evaluated against this baseline first.
+**Baseline:** Persistence model — predict the last known value. Every model is evaluated against this baseline first. (The commonly cited ~15–25 mg/dL T+30 RMSE figure is from OhioT1DM specifically and does not carry over to AZT1D — the real baseline gets measured once AZT1D is running through the pipeline, not assumed.)
 
 **Evaluation:** RMSE, MAE, and CLARK error grid (Zone A = clinically accurate, Zone E = dangerous).
 
@@ -114,7 +118,7 @@ glucopulse/
 │   └── grafana/
 │       └── dashboards/
 ├── data/
-│   └── ohiot1dm/          # gitignored — apply for access above
+│   └── azt1d/             # gitignored — download from Mendeley DOI above
 ├── notebooks/
 │   └── eda.ipynb
 └── requirements.txt
@@ -126,7 +130,7 @@ glucopulse/
 
 - Docker Desktop
 - Python 3.10+
-- OhioT1DM dataset (apply for access above)
+- AZT1D dataset (download from Mendeley DOI above)
 
 ---
 
@@ -141,8 +145,12 @@ source .venv/bin/activate
 
 pip install -r requirements.txt
 
+cp .env.example .env   # then edit credentials as needed
+
 docker compose up -d
 ```
+
+TimescaleDB is exposed on host port **5544** (not the default 5432) — this repo assumes a dev machine may already have a native PostgreSQL install bound to 5432/5433, so the container's host-side mapping was moved to avoid the collision. Inside the Docker network, other services still reach it at `timescaledb:5432`.
 
 ---
 
@@ -150,7 +158,7 @@ docker compose up -d
 
 | Phase | Scope | Status |
 |---|---|---|
-| 1 — Foundation | Docker Compose: all services running with one command | In progress |
+| 1 — Foundation | Docker Compose: all services running with one command | Complete |
 | 2 — Ingestion | Producer → Kafka → Consumer → TimescaleDB + dead letter queue + Grafana | Planned |
 | 3 — Batch + Orchestration | PySpark feature job + Airflow DAGs + data quality gates | Planned |
 | 4 — ML + Serving | TFT training → ONNX export → FastAPI + Grafana RMSE panel | Planned |
