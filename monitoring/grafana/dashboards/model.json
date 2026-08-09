@@ -1,0 +1,170 @@
+{
+  "id": null,
+  "uid": "glucopulse-model",
+  "title": "GlucoPulse Model Performance",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-24h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "patient",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "timescaledb" },
+        "query": "SELECT DISTINCT patient_id FROM cgm_features ORDER BY 1",
+        "refresh": 2,
+        "sort": 1,
+        "current": {},
+        "options": []
+      },
+      {
+        "name": "horizon",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "timescaledb" },
+        "query": "SELECT DISTINCT horizon_min FROM model_predictions ORDER BY 1",
+        "refresh": 2,
+        "sort": 1,
+        "current": {},
+        "options": []
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "TFT vs Persistence RMSE -- Patient $patient (T+$horizon min)",
+      "description": "Rolling RMSE comparison. TFT should beat persistence baseline. Persistence = last known value carried forward.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "fieldConfig": {
+        "defaults": { "unit": "mg/dL", "custom": { "axisLabel": "RMSE (mg/dL)" } },
+        "overrides": [
+          { "matcher": { "type": "byName", "options": "tft_rmse" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] },
+          { "matcher": { "type": "byName", "options": "persistence_rmse" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time_bucket('1 hour', time) AS \"time\", model AS metric, rmse AS value FROM (SELECT time, 'tft' AS model, rmse FROM model_metrics WHERE patient_id = '$patient' AND horizon_min = $horizon UNION ALL SELECT time, 'persistence' AS model, rmse FROM persistence_metrics WHERE patient_id = '$patient' AND horizon_min = $horizon) sub WHERE $__timeFilter(time) GROUP BY 1, 2 ORDER BY 1;",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Prediction vs Actual -- Patient $patient (T+$horizon min)",
+      "description": "Overlay of TFT predictions, persistence baseline, and actual glucose values.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "fieldConfig": {
+        "defaults": { "unit": "mg/dL", "custom": { "axisLabel": "Glucose (mg/dL)" } }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time AS \"time\", actual_glucose AS glucose FROM model_predictions WHERE patient_id = '$patient' AND horizon_min = $horizon AND $__timeFilter(time) ORDER BY time;",
+          "refId": "A"
+        },
+        {
+          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time AS \"time\", tft_prediction AS tft FROM model_predictions WHERE patient_id = '$patient' AND horizon_min = $horizon AND $__timeFilter(time) ORDER BY time;",
+          "refId": "B"
+        },
+        {
+          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time AS \"time\", persistence_prediction AS persistence FROM model_predictions WHERE patient_id = '$patient' AND horizon_min = $horizon AND $__timeFilter(time) ORDER BY time;",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "barchart",
+      "title": "Clarke Error Grid Zone Distribution -- All Test Patients (T+$horizon min)",
+      "description": "Clinical accuracy zones: A = accurate, B = benign, C = overcorrection, D = failure to detect, E = dangerous. TFT should have >70% in Zone A.",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "custom": { "axisLabel": "Count" } }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT zone AS category, count AS value FROM clarke_zones WHERE horizon_min = $horizon ORDER BY CASE zone WHEN 'A' THEN 1 WHEN 'B' THEN 2 WHEN 'C' THEN 3 WHEN 'D' THEN 4 WHEN 'E' THEN 5 END;",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "80% Prediction Interval Coverage -- Patient $patient (T+$horizon min)",
+      "description": "Fraction of actual values falling within the model's 80% prediction interval. Target ~80%. Below 70% indicates miscalibration.",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "fieldConfig": {
+        "defaults": { "unit": "percentunit", "min": 0, "max": 100, "custom": { "axisLabel": "Coverage %" } }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT time_bucket('1 hour', time) AS \"time\", 100.0 * AVG(CASE WHEN actual_glucose BETWEEN pi_lower AND pi_upper THEN 1 ELSE 0 END) AS coverage_pct FROM model_predictions WHERE patient_id = '$patient' AND horizon_min = $horizon AND $__timeFilter(time) GROUP BY 1 ORDER BY 1;",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Overall TFT vs Persistence -- T+$horizon min (Test Patients)",
+      "description": "Aggregate RMSE across all test patients. Green = TFT beats persistence.",
+      "gridPos": { "h": 4, "w": 8, "x": 0, "y": 16 },
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "fieldConfig": {
+        "defaults": { "unit": "mg/dL", "thresholds": { "mode": "absolute", "steps": [ { "value": null, "color": "green" } ] } }
+      },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT 'TFT' AS model, AVG(rmse) AS rmse FROM model_metrics WHERE horizon_min = $horizon AND patient_id IN (SELECT patient_id FROM patient_splits WHERE split = 'test') UNION ALL SELECT 'Persistence', AVG(rmse) FROM persistence_metrics WHERE horizon_min = $horizon AND patient_id IN (SELECT patient_id FROM patient_splits WHERE split = 'test');",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "table",
+      "title": "Per-Patient RMSE -- T+$horizon min",
+      "description": "Individual patient performance on test set. Small N = high variance expected.",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 20 },
+      "datasource": { "type": "postgres", "uid": "timescaledb" },
+      "targets": [
+        {
+          "datasource": { "type": "postgres", "uid": "timescaledb" },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT patient_id, tft_rmse, persistence_rmse, tft_rmse - persistence_rmse AS delta, CASE WHEN tft_rmse < persistence_rmse THEN 'TFT wins' ELSE 'Persistence wins' END AS winner FROM (SELECT m.patient_id, AVG(m.rmse) AS tft_rmse, AVG(p.rmse) AS persistence_rmse FROM model_metrics m JOIN persistence_metrics p ON m.patient_id = p.patient_id AND m.horizon_min = p.horizon_min WHERE m.horizon_min = $horizon AND m.patient_id IN (SELECT patient_id FROM patient_splits WHERE split = 'test') GROUP BY m.patient_id) sub ORDER BY delta;",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

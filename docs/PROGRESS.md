@@ -84,6 +84,27 @@ OhioT1DM requires a gated institutional request (~1 week). A single OhioT1DM fil
 
 **Phase 2 done-gate (docs/BLUEPRINT.md) is now fully met**: real patient replay lands in TimescaleDB, DLQ demonstrably catches deliberately bad messages (all 3 classes, not just one), and Grafana shows live ingestion.
 
+## Phase 3 — PySpark feature job + Airflow orchestration built and verified (2026-07-13), Phase 3 done-gate MET
+
+**Decisions made (full writeup in `docs/QUESTIONS.md`, 2026-07-13 Phase 3 entry):** resample-to-5-min-grid then roll; delta + rolling mean/std (15min, 60min) + time-since-last-bolus/carb with explicit `has_prior_*` cold-start flags (NaN, not a sentinel); full-history recompute every run (scaling tradeoff documented in `docs/PROBLEMS.md` rather than building unneeded incremental/lookback logic); features table keyed `(patient_id, time)`, no `model_version` (that's Phase 4's concern, not a feature-engineering one); per-patient-week quality gate (180-min single-gap threshold, <85% expected-readings count threshold, prorated for partial boundary weeks); exclude-and-log locally, with a circuit breaker on the run's overall exclusion rate as the only thing allowed to hard-fail the DAG (placeholder threshold at 50%, documented as arbitrary at N=3 patients).
+
+**Built:**
+- `timescaledb/init/005_cgm_features.sql` — `cgm_features` hypertable + `feature_run_summary` log table.
+- `spark/feature_job.py` — PySpark batch job: JDBC read of `cgm_readings`, per-patient resample + rolling features, per-patient-week quality evaluation, upsert to `cgm_features` (`ON CONFLICT DO UPDATE`, not `DO NOTHING`, since a recompute can legitimately change values), writes a `feature_run_summary` row every run.
+- `airflow/Dockerfile` — custom image extending `apache/airflow:2.9.3-python3.11` with a JDK, PySpark, and the Postgres JDBC driver, running Airflow and Spark in the same container (avoided docker-in-docker/DockerOperator, since a demo-scale single-node Spark job doesn't need it).
+- `airflow/dags/feature_pipeline.py` — 2-task DAG: `run_feature_job` (never raises on a single bad patient-week) → `quality_gate_check` (the circuit breaker, reads `feature_run_summary` and is the only task allowed to fail the DAG).
+- `timescaledb/init/000_create_airflow_db.sh` — Airflow's metadata store lives in its own database on the same TimescaleDB Postgres instance, not a separate Postgres service (not in the locked stack).
+- New `airflow` service in `docker-compose.yml` (`airflow standalone`, LocalExecutor, webserver on :8080).
+
+**Verified (not just assumed from reading the code):**
+- Custom image builds and the DAG loads with zero import errors (`airflow dags list-import-errors` → "No data found") — confirms Java + PySpark + JDBC driver + psycopg2 are all correctly wired in one image.
+- Triggered `feature_pipeline` manually: `state=success` in ~18s, wrote 16,157 rows to `cgm_features`.
+- **Quality gate fired on real data already in TimescaleDB, with no synthetic injection needed**: 3 of 22 patient-weeks excluded — Subject 3's known 1384-min gap, Subject 1's 600-min gap, and a 260-min gap for Subject 1 not previously called out but correctly above the 180-min threshold. Confirmed by querying `cgm_features` directly for the excluded week (zero rows), not by trusting the task log.
+- Exclusion rate 13.64%, correctly under the 50% circuit-breaker placeholder — DAG succeeded rather than hard-failing, confirming exclude-locally/escalate-globally behaves as designed at a real, current exclusion rate.
+- Spot-checked feature rows for physiological sanity (delta, rolling means, `time_since_last_bolus_min` all populated and consistent with the raw series).
+
+**Phase 3 done-gate (`docs/BLUEPRINT.md`) is now fully met.**
+
 ## Not yet started
 
-- **Phase 3 — Batch + Orchestration**, **Phase 4 — ML + Serving:** not started, depend on Phase 2 completing first per the phase-gating rule in `docs/BLUEPRINT.md`.
+- **Phase 4 — ML + Serving:** not started, depends on Phase 3 completing first per the phase-gating rule in `docs/BLUEPRINT.md`.

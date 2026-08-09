@@ -84,3 +84,24 @@ AZT1D downloaded into `data/azt1d/` (CC BY 4.0, no application — Mendeley DOI 
 - The DLQ demonstrably catches a deliberately malformed message — proven by actually sending one, not by code review. ✅ All three failure classes (`cgm-parse-errors`, `cgm-dlq`, `cgm-implausible`) individually verified with injected messages.
 - Grafana shows live ingestion. ✅ 3-panel dashboard (ingestion rate, per-patient glucose trace, DLQ health), each panel's query verified directly against `/api/ds/query`, not just visually.
 - Verified by running it end-to-end against real data, same standard as Phase 1. Full writeup in `docs/PROGRESS.md` and `docs/QUESTIONS.md`.
+
+---
+
+## Now building: Phase 3 — Batch + Orchestration
+
+**Goal:** an Airflow DAG runs a PySpark job over the full raw `cgm_readings` history, produces features in TimescaleDB, and a real data-quality gate demonstrably blocks a run when the data doesn't meet it — not just a DAG that always succeeds.
+
+### Concrete steps, in order
+
+1. **Feature set and recompute strategy — DECIDED (2026-07-13).** Resample to 5-min grid then roll; delta + rolling mean/std + time-since-last-bolus/carb with explicit cold-start flags; full-history recompute every run. Features table keyed `(patient_id, time)`, same grain as `cgm_readings`. Full writeup in `docs/QUESTIONS.md`.
+2. **Data-quality gate — DECIDED (2026-07-13).** Per-patient-week: 180-min single-gap threshold, <85% expected-readings count threshold. Exclude+log per failing patient-week; a circuit-breaker on the run's overall exclusion rate is the only check allowed to hard-fail the DAG task. Full writeup in `docs/QUESTIONS.md`.
+3. **PySpark job** — reads `cgm_readings` (JDBC), computes the decided feature set across full patient history, writes to a new features table. Idempotent reruns via upsert-on-conflict on `(patient_id, time)`, not append-only.
+4. **Airflow DAG** — schedules the Spark job, runs the quality gate as a downstream task that can fail the DAG via the circuit breaker, retry logic for transient failures.
+5. **Verify**: run the DAG on-demand, confirm features land in TimescaleDB matching a hand-computed sample. The quality gate should already fail 2 of 3 real patient-weeks on the currently-loaded data (Subject 3's 1384-min gap, Subject 1's 600-min gap) without needing synthetic injection — confirm that happens, and confirm the circuit breaker does NOT trip at that exclusion rate (2 failing weeks out of the full run, not "systemic").
+
+### Definition of done for Phase 3 — MET (2026-07-13)
+
+- Airflow DAG runs on-demand, produces features in TimescaleDB. ✅ `feature_pipeline` DAG triggered manually, completed `state=success` in ~18s, wrote 16,157 rows to `cgm_features`.
+- A data-quality gate demonstrably blocks a bad run — proven by actually triggering one, not by code review. ✅ On the currently-loaded real data (no synthetic injection needed): 3 of 22 patient-weeks correctly excluded (Subject 3's 1384-min gap, Subject 1's 600-min and 260-min gaps), confirmed by querying `cgm_features` directly (zero rows for the excluded week) not just trusting task logs. Exclusion rate 13.64%, correctly under the 50% circuit-breaker placeholder, so the DAG succeeded rather than hard-failing.
+- PySpark is honestly scoped in any writeup: local single-node in Docker demonstrates the API/pattern, not real distributed scale (`docs/PROBLEMS.md`).
+- Full writeup in `docs/PROGRESS.md` and `docs/QUESTIONS.md`.

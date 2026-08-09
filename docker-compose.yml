@@ -108,7 +108,66 @@ services:
       timescaledb:
         condition: service_healthy
 
+  airflow:
+    build:
+      context: .
+      dockerfile: airflow/Dockerfile
+    container_name: glucopulse-airflow
+    command: standalone
+    ports:
+      - "8080:8080"
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@timescaledb:5432/airflow
+      AIRFLOW__CORE__LOAD_EXAMPLES: "false"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      PG_HOST: timescaledb
+      PG_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./spark:/opt/airflow/spark
+      - airflow_data:/opt/airflow
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+
+  model:
+    build: ./model
+    container_name: glucopulse-model
+    profiles: ["tools"]
+    environment:
+      PG_HOST: timescaledb
+      PG_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - ./model:/app
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+
+  serving:
+    build: ./serving
+    container_name: glucopulse-serving
+    ports:
+      - "8000:8000"
+    profiles: ["tools"]
+    depends_on:
+      timescaledb:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
 volumes:
   kafka_data:
   timescaledb_data:
   grafana_data:
+  airflow_data:
