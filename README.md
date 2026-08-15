@@ -2,6 +2,25 @@
 
 Real-time streaming pipeline for continuous glucose monitor (CGM) data. Built to answer one question a production data engineer faces daily: **how do you move sensor data reliably from source to storage to model, and know when something breaks before your users do?**
 
+**Live demo:** [srikarjy025-glucopulse.hf.space](https://srikarjy025-glucopulse.hf.space) — a standalone FastAPI endpoint serving the trained forecasting model (`POST /predict`, `GET /docs` for the interactive Swagger UI). This is the serving layer only, not the full streaming pipeline — see [What This Project Is](#what-this-project-is) below for why that distinction matters.
+
+---
+
+## About
+
+GlucoPulse ingests continuous glucose monitor readings (one every 5 minutes per patient, replayed from a real dataset) through a Kafka → TimescaleDB pipeline, engineers features in batch with PySpark, trains a Temporal Fusion Transformer to forecast glucose 30 and 60 minutes ahead, and serves that model through a lightweight standalone FastAPI/ONNX endpoint. Every claim in this README — dataset counts, RMSE numbers, latency tradeoffs — is measured against the actual data and actual trained model, not assumed or copied from a paper. Where a result came out worse than expected (an under-trained model losing to a naive baseline, a serving bug that silently returned wrong predictions), that's reported too; see [Forecasting Task](#forecasting-task) and the commit history for the honest version of how this was built.
+
+### What This Project Is
+
+- A **fault-tolerant ingestion pipeline** (Kafka, dead-letter queue, TimescaleDB) that treats a silently dropped or corrupted sensor reading as seriously as a crashed process.
+- A **real, measured forecasting benchmark**: a Temporal Fusion Transformer evaluated against a persistence baseline on fully held-out patients, not just trained and assumed to work.
+- A **standalone, deployable serving layer** (ONNX + INT8 quantization, PyTorch fallback for short history) that needs nothing but a model file to run — no live Kafka/TimescaleDB dependency — which is what makes the [live demo](#live-demo) above possible on a single free-tier container.
+
+### What This Project Is Not
+
+- Not a medical device, and not clinically validated — AZT1D is a research dataset, and the forecasting numbers below are a machine learning benchmark, not a clinical claim.
+- The live demo is the serving layer only. The full streaming pipeline (Kafka, TimescaleDB, Grafana, Airflow) runs locally via `docker compose up -d` — it's not something a free-tier Space can host, and this README doesn't pretend otherwise.
+
 ---
 
 ## The Engineering Problem
@@ -86,9 +105,22 @@ Known data-quality issue (measured, not assumed): `EventDateTime` is a per-secon
 
 Predict glucose value at **T+30 minutes** and **T+60 minutes**.
 
-**Baseline:** Persistence model — predict the last known value. Every model is evaluated against this baseline first. (The commonly cited ~15–25 mg/dL T+30 RMSE figure is from OhioT1DM specifically and does not carry over to AZT1D — the real baseline gets measured once AZT1D is running through the pipeline, not assumed.)
+**Baseline:** Persistence model — predict the last known value. Every model is evaluated against this baseline first. (The commonly cited ~15–25 mg/dL T+30 RMSE figure is from OhioT1DM specifically and does not carry over to AZT1D — measured directly below, not assumed.)
 
-**Evaluation:** RMSE, MAE, and CLARK error grid (Zone A = clinically accurate, Zone E = dangerous).
+**Model:** Temporal Fusion Transformer (`pytorch-forecasting`), trained on 18 patients, validated on 3, tested on 4 fully held-out patients (patient-level split, `model/splits.py`, seed 42) — generalization to unseen patients, not just unseen weeks. `min_encoder_length=6` (30 min) alongside `max_encoder_length=24` (2h) so the model learns to handle shorter real-world history (new sensor, a gap), not just a full 2h window — `model/train.py`.
+
+**Evaluation:** RMSE, MAE, and Clarke error grid (Zone A = clinically accurate, Zone E = dangerous), measured on the same held-out test patients for both models.
+
+**Results (test set, `model/results/baseline_metrics.json` + `model/results/tft_eval.json`):**
+
+| Horizon | Model | RMSE (mg/dL) | MAE (mg/dL) | n |
+|---|---|---|---|---|
+| T+30 | Persistence baseline | 25.80 | 18.88 | 30,109 |
+| T+30 | TFT | **25.47** | 17.61 | 30,621 |
+| T+60 | Persistence baseline | 42.10 | 31.69 | 29,984 |
+| T+60 | TFT | **37.65** | 27.48 | 30,621 |
+
+The TFT beats the persistence baseline at both horizons — reported as measured, not assumed. (An earlier version of this table, from a checkpoint later found to have trained on roughly 2.6% of the available data due to a stale DB snapshot, showed the TFT losing to baseline at T+30; retraining on the full ~190K-example training set reversed that.) Clarke error grid at T+30: 85.5% Zone A, 13.2% Zone B, 1.3% Zone D, 0% Zones C/E (TFT); 80% prediction-interval coverage is 76.6% at T+30 and 69.4% at T+60 — improved over the under-trained checkpoint but still under-covering the nominal 80% target, a real calibration limitation, not hidden here.
 
 ---
 
@@ -97,6 +129,7 @@ Predict glucose value at **T+30 minutes** and **T+60 minutes**.
 ```
 glucopulse/
 ├── docker-compose.yml
+├── LICENSE
 ├── producer/
 │   ├── Dockerfile
 │   └── replay_sensor.py
@@ -104,16 +137,21 @@ glucopulse/
 │   ├── Dockerfile
 │   └── ingest.py
 ├── spark/
-│   └── feature_engineering.py
+│   └── feature_job.py
 ├── dags/
 │   └── glucopulse_dag.py
 ├── model/
-│   ├── train.py
-│   ├── evaluate.py
-│   └── export_onnx.py
+│   ├── train.py            # TFT training (min/max_encoder_length, patient-level split)
+│   ├── evaluate.py         # TFT vs. persistence baseline, Clarke error grid
+│   ├── baseline.py         # persistence baseline
+│   ├── export_onnx.py      # ONNX export + INT8 quantization + parity check
+│   ├── artifacts/          # tft.ckpt, tft.onnx, scalers.json, training_dataset.pkl
+│   └── results/            # baseline_metrics.json, tft_eval.json
 ├── serving/
-│   ├── Dockerfile
-│   └── api.py
+│   ├── Dockerfile           # standalone -- only needs model/artifacts/, no DB
+│   ├── requirements.txt
+│   └── api.py               # ONNX (full history) + PyTorch fallback (short history)
+├── hf_space/                # git submodule -- the live demo above, ONNX-only
 ├── monitoring/
 │   └── grafana/
 │       └── dashboards/
@@ -160,8 +198,8 @@ TimescaleDB is exposed on host port **5544** (not the default 5432) — this rep
 |---|---|---|
 | 1 — Foundation | Docker Compose: all services running with one command | Complete |
 | 2 — Ingestion | Producer → Kafka → Consumer → TimescaleDB + dead letter queue + Grafana | Complete |
-| 3 — Batch + Orchestration | PySpark feature job + Airflow DAGs + data quality gates | Planned |
-| 4 — ML + Serving | TFT training → ONNX export → FastAPI + Grafana RMSE panel | Planned |
+| 3 — Batch + Orchestration | PySpark feature job + Airflow DAGs + data quality gates | Complete |
+| 4 — ML + Serving | TFT training → ONNX export → FastAPI + Grafana RMSE panel | Complete |
 
 ---
 
@@ -178,3 +216,9 @@ Cron has no retry logic, no dependency management, and no SLA alerting. A cron j
 
 **On the model as a pipeline validator:**
 If prediction RMSE degrades, it signals either a model problem or a data quality problem upstream. Grafana surfaces which one it is.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE). The AZT1D dataset itself is separately licensed CC BY 4.0 by its authors (see [Data Source](#data-source)); that license covers the data, not this codebase.
