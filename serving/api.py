@@ -12,21 +12,42 @@ from typing import Optional
 
 import numpy as np
 import onnxruntime as ort
+import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="GlucoPulse Inference API", version="1.0.0")
 
 MODEL_PATH = Path(__file__).parent.parent / "model" / "artifacts" / "tft.onnx"
+SCALERS_PATH = Path(__file__).parent.parent / "model" / "artifacts" / "scalers.json"
 
-# Feature columns in the order expected by the model
+# Feature columns in the order expected by the model (matches
+# training_dataset.pkl's `reals`: known_reals then unknown_reals)
 ENCODER_CONT_FEATURES = [
     "hour", "day_of_week", "glucose_value", "delta",
     "rolling_mean_15", "rolling_std_15", "rolling_mean_60", "rolling_std_60",
     "has_prior_bolus", "time_since_last_bolus_min",
     "has_prior_carb", "time_since_last_carb_min"
 ]
-DECODER_CONT_FEATURES = ["hour", "day_of_week"]
+
+with open(SCALERS_PATH) as f:
+    SCALERS = json.load(f)
+
+
+def scale_feature(name: str, value: float) -> float:
+    """Apply the same per-feature StandardScaler the TimeSeriesDataSet used
+    during training ((value - mean) / scale). Every continuous feature is
+    scaled this way except glucose_value -- it's the target and training
+    used target_normalizer=None, so it stays raw mg/dL. Feeding raw values
+    for the other 11 features (the bug this fixes) silently mismatches
+    what the model was trained on -- not caught by ONNX parity checks since
+    those replay real, already-scaled training samples."""
+    scaler = SCALERS.get(name)
+    if scaler and scaler.get("mean") and scaler.get("scale"):
+        mean, scale = scaler["mean"][0], scaler["scale"][0]
+        if scale != 0:
+            return (value - mean) / scale
+    return value
 
 # Patient ID encoding (from training)
 PATIENT_ID_MAP = {
@@ -105,44 +126,68 @@ def prepare_inputs(request: InferenceRequest):
     for i, reading in enumerate(request.readings):
         if i >= encoder_steps:
             break
-        dt = np.datetime64(reading.timestamp.replace('Z', '+00:00'))
-        hour = dt.astype('datetime64[h]').astype(int) % 24
-        day_of_week = dt.astype('datetime64[D]').astype(int) % 7
+        # pd.Timestamp.dayofweek (Monday=0) matches train.py's
+        # df["time"].dt.dayofweek exactly -- a raw numpy epoch-day%7 formula
+        # does not (it's offset by a constant 4, since epoch day 0 was a
+        # Thursday), which would silently feed the model a rotated,
+        # never-seen day-of-week signal.
+        ts = pd.Timestamp(reading.timestamp)
+        hour = ts.hour
+        day_of_week = ts.dayofweek
 
-        # Fill encoder features (last n_readings steps)
+        # Fill encoder features (last n_readings steps). Every feature except
+        # glucose_value (index 2) must be scaled -- see scale_feature.
         idx = encoder_steps - n_readings + i
-        encoder_cont[0, idx, 0] = float(hour)
-        encoder_cont[0, idx, 1] = float(day_of_week)
+        encoder_cont[0, idx, 0] = scale_feature("hour", float(hour))
+        encoder_cont[0, idx, 1] = scale_feature("day_of_week", float(day_of_week))
         encoder_cont[0, idx, 2] = reading.glucose_value
-        encoder_cont[0, idx, 3] = reading.delta if reading.delta is not None else 0.0
-        encoder_cont[0, idx, 4] = reading.rolling_mean_15 if reading.rolling_mean_15 is not None else reading.glucose_value
-        encoder_cont[0, idx, 5] = reading.rolling_std_15 if reading.rolling_std_15 is not None else 0.0
-        encoder_cont[0, idx, 6] = reading.rolling_mean_60 if reading.rolling_mean_60 is not None else reading.glucose_value
-        encoder_cont[0, idx, 6] = reading.rolling_std_60 if reading.rolling_std_60 is not None else 0.0
-        encoder_cont[0, idx, 8] = 1.0 if reading.has_prior_bolus else 0.0
-        encoder_cont[0, idx, 9] = reading.time_since_last_bolus_min if reading.time_since_last_bolus_min is not None else -1.0
-        encoder_cont[0, idx, 10] = 1.0 if reading.has_prior_carb else 0.0
-        encoder_cont[0, idx, 11] = reading.time_since_last_carb_min if reading.time_since_last_carb_min is not None else -1.0
+        encoder_cont[0, idx, 3] = scale_feature("delta", reading.delta if reading.delta is not None else 0.0)
+        encoder_cont[0, idx, 4] = scale_feature("rolling_mean_15", reading.rolling_mean_15 if reading.rolling_mean_15 is not None else reading.glucose_value)
+        encoder_cont[0, idx, 5] = scale_feature("rolling_std_15", reading.rolling_std_15 if reading.rolling_std_15 is not None else 0.0)
+        encoder_cont[0, idx, 6] = scale_feature("rolling_mean_60", reading.rolling_mean_60 if reading.rolling_mean_60 is not None else reading.glucose_value)
+        encoder_cont[0, idx, 7] = scale_feature("rolling_std_60", reading.rolling_std_60 if reading.rolling_std_60 is not None else 0.0)
+        encoder_cont[0, idx, 8] = scale_feature("has_prior_bolus", 1.0 if reading.has_prior_bolus else 0.0)
+        encoder_cont[0, idx, 9] = scale_feature("time_since_last_bolus_min", reading.time_since_last_bolus_min if reading.time_since_last_bolus_min is not None else -1.0)
+        encoder_cont[0, idx, 10] = scale_feature("has_prior_carb", 1.0 if reading.has_prior_carb else 0.0)
+        encoder_cont[0, idx, 11] = scale_feature("time_since_last_carb_min", reading.time_since_last_carb_min if reading.time_since_last_carb_min is not None else -1.0)
 
-    # Decoder: future time steps (known covariates only)
-    decoder_cont = np.zeros((1, decoder_steps, 2), dtype=np.float32)
+    # Decoder: future time steps. decoder_cont must have the same 12 columns
+    # as encoder_cont (the model's unified `reals` ordering -- known_reals
+    # then unknown_reals, see training_dataset.pkl); only the known-future
+    # columns (hour, day_of_week; indices 0-1) are populated and scaled the
+    # same way as the encoder, the rest stay zero since those values aren't
+    # knowable ahead of time (and the model's decoder pathway only attends
+    # to the known-reals columns regardless of what's in the others).
+    decoder_cont = np.zeros((1, decoder_steps, 12), dtype=np.float32)
     decoder_cat = np.zeros((1, decoder_steps, 1), dtype=np.int64)
     decoder_cat[0, :, 0] = patient_cat
 
-    last_time = np.datetime64(request.readings[-1].timestamp.replace('Z', '+00:00'))
+    last_time = pd.Timestamp(request.readings[-1].timestamp)
     for i in range(decoder_steps):
-        future_time = last_time + np.timedelta64(5 * (i + 1), 'm')
-        hour = future_time.astype('datetime64[h]').astype(int) % 24
-        day_of_week = future_time.astype('datetime64[D]').astype(int) % 7
-        decoder_cont[0, i, 0] = float(hour)
-        decoder_cont[0, i, 1] = float(day_of_week)
+        future_time = last_time + pd.Timedelta(minutes=5 * (i + 1))
+        hour = future_time.hour
+        day_of_week = future_time.dayofweek
+        decoder_cont[0, i, 0] = scale_feature("hour", float(hour))
+        decoder_cont[0, i, 1] = scale_feature("day_of_week", float(day_of_week))
 
-    # Lengths
+    # Lengths. The exported ONNX graph was traced with encoder_lengths=24
+    # baked in as a constant (pytorch_forecasting's attention masking reads
+    # encoder_lengths as a Python int during tracing -- see the
+    # TracerWarnings in export_onnx.py's export step) -- passing any other
+    # value crashes ONNX Runtime's attention broadcast at inference. So this
+    # is always 24 regardless of n_readings, which means requests with
+    # fewer than 24 readings get zero-padded history that the model treats
+    # as real, not masked-out, history. Known limitation: send full 24-step
+    # (2h) history for reliable predictions; fewer readings degrade quality
+    # rather than erroring.
     encoder_lengths = np.array([encoder_steps], dtype=np.int64)
     decoder_lengths = np.array([decoder_steps], dtype=np.int64)
 
     # Target scale (identity normalizer from training)
-    target_scale = np.array([[1.0, 0.0]], dtype=np.float32)  # [scale, center]
+    # [center, scale] (pytorch_forecasting's actual order -- confirmed against
+    # a real training sample). target_normalizer=None in training means
+    # identity: center=0, scale=1.
+    target_scale = np.array([[0.0, 1.0]], dtype=np.float32)
 
     return {
         "encoder_lengths": encoder_lengths,

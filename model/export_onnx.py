@@ -70,7 +70,6 @@ def quantize_onnx_model(onnx_path: Path, quantized_path: Path) -> None:
         model_input=str(onnx_path),
         model_output=str(quantized_path),
         weight_type=QuantType.QInt8,
-        optimize_model=True,
     )
     print(f"Quantized model saved to {quantized_path}")
     
@@ -160,6 +159,66 @@ def main():
     # Apply INT8 dynamic quantization
     int8_path = MODEL_DIR / "tft.onnx"
     quantize_onnx_model(fp32_path, int8_path)
+
+    check_onnx_parity(wrapper, int8_path, x, encoder_lstm_h0, encoder_lstm_c0, decoder_lstm_h0, decoder_lstm_c0)
+
+
+def check_onnx_parity(
+    wrapper: TFTONNXWrapper,
+    onnx_path: Path,
+    x: dict,
+    encoder_lstm_h0: torch.Tensor,
+    encoder_lstm_c0: torch.Tensor,
+    decoder_lstm_h0: torch.Tensor,
+    decoder_lstm_c0: torch.Tensor,
+    atol: float = 5.0,
+) -> None:
+    """Compare INT8 ONNX output against the original PyTorch model on the same
+    sample. INT8 dynamic quantization can silently change predictions -- this
+    catches that instead of assuming export preserved behavior. atol is in
+    mg/dL (the model's own output units), not a raw float tolerance, since
+    that's the unit that actually matters for this task."""
+    import onnxruntime as ort
+
+    with torch.no_grad():
+        torch_out = wrapper(
+            x["encoder_lengths"],
+            x["decoder_lengths"],
+            x["encoder_cont"],
+            x["encoder_cat"],
+            x["decoder_cont"],
+            x["decoder_cat"],
+            x["target_scale"],
+            encoder_lstm_h0,
+            encoder_lstm_c0,
+            decoder_lstm_h0,
+            decoder_lstm_c0,
+        ).numpy()
+
+    session = ort.InferenceSession(str(onnx_path), providers=["CPUExecutionProvider"])
+    # The LSTM initial-state args are never wired into TFTONNXWrapper.forward's
+    # call to self.tft(x), so torch.onnx.export's constant-folding correctly
+    # prunes them as dead inputs -- the exported graph only has these 7.
+    onnx_out = session.run(
+        None,
+        {
+            "encoder_lengths": x["encoder_lengths"].numpy(),
+            "decoder_lengths": x["decoder_lengths"].numpy(),
+            "encoder_cont": x["encoder_cont"].numpy(),
+            "encoder_cat": x["encoder_cat"].numpy(),
+            "decoder_cont": x["decoder_cont"].numpy(),
+            "decoder_cat": x["decoder_cat"].numpy(),
+            "target_scale": x["target_scale"].numpy(),
+        },
+    )[0]
+
+    max_abs_diff = float(abs(torch_out - onnx_out).max())
+    print(f"ONNX (INT8) vs PyTorch max abs diff: {max_abs_diff:.4f} mg/dL (tolerance: {atol} mg/dL)")
+    assert max_abs_diff < atol, (
+        f"INT8 ONNX export diverges from PyTorch model by {max_abs_diff:.4f} mg/dL, "
+        f"exceeding the {atol} mg/dL tolerance -- quantization changed behavior."
+    )
+    print("ONNX parity check passed")
 
 
 if __name__ == "__main__":
