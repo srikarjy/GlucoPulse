@@ -16,6 +16,17 @@ Feature channels (see README's TFT justification):
 Bolus/carb are sparse relative to the 5-min grid -- has_prior_bolus/carb
 plus the existing NaN cold-start convention (docs/QUESTIONS.md) is what
 resolves that sparsity, not a new imputation scheme.
+
+min_encoder_length=6 (30 min): earlier training only ever used
+min_encoder_length=max_encoder_length=24, so every window was a full 2h of
+real history and the model never learned what a short or partially-padded
+encoder sequence means. Real requests to serving/api.py can have less than
+24 readings (new sensor, a gap) -- serving that case correctly requires the
+model to have actually seen variable-length windows during training, not
+just receive zero-padding at inference it was never exposed to. This
+naturally produces training windows with 6-24 real encoder steps (the
+early part of each patient's series) without needing randomize_length
+augmentation.
 """
 
 import pickle
@@ -57,6 +68,12 @@ from db import load_features
 from splits import TRAIN_PATIENTS, VAL_PATIENTS
 
 MAX_ENCODER_LENGTH = 24  # 2h of history
+MIN_ENCODER_LENGTH = 6  # 30 min -- shortest history the model is trained to
+# handle. Below this there's too little signal for a T+60 forecast to mean
+# much; above it, real users may have less than the full 2h (new sensor,
+# a gap) and the model needs to have actually seen short/masked encoder
+# windows during training to handle them, not just get zero-padding it
+# was never trained on at serving time.
 MAX_PREDICTION_LENGTH = 12  # 60 min ahead, 5-min steps
 MODEL_DIR = Path(__file__).parent / "artifacts"
 CHECKPOINT_PATH = MODEL_DIR / "tft.ckpt"
@@ -101,6 +118,7 @@ def make_datasets(df: pd.DataFrame):
         time_idx="time_idx",
         target="glucose_value",
         group_ids=["patient_id"],
+        min_encoder_length=MIN_ENCODER_LENGTH,
         max_encoder_length=MAX_ENCODER_LENGTH,
         max_prediction_length=MAX_PREDICTION_LENGTH,
         static_categoricals=["patient_id"],

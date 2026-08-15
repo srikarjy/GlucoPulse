@@ -88,7 +88,7 @@ Predict glucose value at **T+30 minutes** and **T+60 minutes**.
 
 **Baseline:** Persistence model — predict the last known value. Every model is evaluated against this baseline first. (The commonly cited ~15–25 mg/dL T+30 RMSE figure is from OhioT1DM specifically and does not carry over to AZT1D — measured directly below, not assumed.)
 
-**Model:** Temporal Fusion Transformer (`pytorch-forecasting`), trained on 18 patients, validated on 3, tested on 4 fully held-out patients (patient-level split, `model/splits.py`, seed 42) — generalization to unseen patients, not just unseen weeks.
+**Model:** Temporal Fusion Transformer (`pytorch-forecasting`), trained on 18 patients, validated on 3, tested on 4 fully held-out patients (patient-level split, `model/splits.py`, seed 42) — generalization to unseen patients, not just unseen weeks. `min_encoder_length=6` (30 min) alongside `max_encoder_length=24` (2h) so the model learns to handle shorter real-world history (new sensor, a gap), not just a full 2h window — `model/train.py`.
 
 **Evaluation:** RMSE, MAE, and Clarke error grid (Zone A = clinically accurate, Zone E = dangerous), measured on the same held-out test patients for both models.
 
@@ -97,11 +97,11 @@ Predict glucose value at **T+30 minutes** and **T+60 minutes**.
 | Horizon | Model | RMSE (mg/dL) | MAE (mg/dL) | n |
 |---|---|---|---|---|
 | T+30 | Persistence baseline | 25.80 | 18.88 | 30,109 |
-| T+30 | TFT | **28.56** | 19.21 | 29,684 |
+| T+30 | TFT | **25.47** | 17.61 | 30,621 |
 | T+60 | Persistence baseline | 42.10 | 31.69 | 29,984 |
-| T+60 | TFT | **40.20** | 29.14 | 29,684 |
+| T+60 | TFT | **37.65** | 27.48 | 30,621 |
 
-The TFT underperforms the persistence baseline at T+30 and outperforms it at T+60 — reported as measured, not smoothed into a single "the model wins" narrative. At T+30 the glucose signal is dominated by short-term autocorrelation that a plain persistence model already captures well; the TFT's advantage shows up further out, where persistence's naive flat-line assumption breaks down. Clarke error grid at T+30: 83.7% Zone A, 15.2% Zone B, 1.1% Zone D, 0% Zones C/E (TFT); 80% prediction-interval coverage is 73.6% at T+30 and 61.4% at T+60, both under-covering the nominal 80% target — the quantile calibration isn't tight, a real limitation, not hidden here.
+The TFT beats the persistence baseline at both horizons — reported as measured, not assumed. (An earlier version of this table, from a checkpoint later found to have trained on roughly 2.6% of the available data due to a stale DB snapshot, showed the TFT losing to baseline at T+30; retraining on the full ~190K-example training set reversed that.) Clarke error grid at T+30: 85.5% Zone A, 13.2% Zone B, 1.3% Zone D, 0% Zones C/E (TFT); 80% prediction-interval coverage is 76.6% at T+30 and 69.4% at T+60 — improved over the under-trained checkpoint but still under-covering the nominal 80% target, a real calibration limitation, not hidden here.
 
 ---
 
