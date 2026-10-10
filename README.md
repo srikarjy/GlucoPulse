@@ -2,7 +2,7 @@
 
 Real-time streaming pipeline for continuous glucose monitor (CGM) data. Built to answer one question a production data engineer faces daily: **how do you move sensor data reliably from source to storage to model, and know when something breaks before your users do?**
 
-**Live demo:** [srikarjy025-glucopulse.hf.space](https://srikarjy025-glucopulse.hf.space) — a standalone FastAPI endpoint serving the trained forecasting model (`POST /predict`, `GET /docs` for the interactive Swagger UI). This is the serving layer only, not the full streaming pipeline — see [What This Project Is](#what-this-project-is) below for why that distinction matters.
+**Live demo:** [srikarjy025-glucopulse.hf.space](https://srikarjy025-glucopulse.hf.space) (also deployed on Vercel: [glucopulse-inference.vercel.app](https://glucopulse-inference.vercel.app)) — a standalone FastAPI endpoint serving the trained forecasting model (`POST /predict`, `GET /docs` for the interactive Swagger UI). This is the serving layer only, not the full streaming pipeline — see [What This Project Is](#what-this-project-is) below for why that distinction matters.
 
 ---
 
