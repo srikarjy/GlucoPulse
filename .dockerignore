@@ -1,0 +1,10 @@
+.git
+.venv
+data/
+hf_space/
+audit/
+tests/
+**/__pycache__
+model/lightning_logs/
+model/artifacts/checkpoints/
+model/artifacts/training_dataset.pkl

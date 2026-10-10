@@ -49,6 +49,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
+      GLUCOPULSE_FHIR_DB_PASSWORD: ${GLUCOPULSE_FHIR_DB_PASSWORD:-}
     volumes:
       - timescaledb_data:/var/lib/postgresql/data
       - ./timescaledb/init:/docker-entrypoint-initdb.d
@@ -151,11 +152,31 @@ services:
         condition: service_healthy
 
   serving:
-    build: ./serving
+    build:
+      context: .
+      dockerfile: serving/Dockerfile
     container_name: glucopulse-serving
     ports:
       - "8000:8000"
     profiles: ["tools"]
+    environment:
+      # FHIR facade. Empty values fail closed: no auth config -> every
+      # protected endpoint returns 401; no pseudonym key -> store won't start.
+      PG_HOST: timescaledb
+      PG_PORT: "5432"
+      POSTGRES_DB: ${POSTGRES_DB}
+      GLUCOPULSE_FHIR_DB_USER: glucopulse_fhir
+      GLUCOPULSE_FHIR_DB_PASSWORD: ${GLUCOPULSE_FHIR_DB_PASSWORD:-}
+      GLUCOPULSE_AUTH_MODE: ${GLUCOPULSE_AUTH_MODE:-}
+      GLUCOPULSE_JWT_SECRET: ${GLUCOPULSE_JWT_SECRET:-}
+      GLUCOPULSE_JWKS_URL: ${GLUCOPULSE_JWKS_URL:-}
+      GLUCOPULSE_ISSUER: ${GLUCOPULSE_ISSUER:-}
+      GLUCOPULSE_AUDIENCE: ${GLUCOPULSE_AUDIENCE:-glucopulse-fhir}
+      GLUCOPULSE_PSEUDONYM_KEY: ${GLUCOPULSE_PSEUDONYM_KEY:-}
+      GLUCOPULSE_PUBLIC_URL: ${GLUCOPULSE_PUBLIC_URL:-https://localhost:8443}
+      GLUCOPULSE_AUDIT_PATH: /audit/audit.jsonl
+    volumes:
+      - audit_data:/audit
     depends_on:
       timescaledb:
         condition: service_healthy
@@ -166,7 +187,36 @@ services:
       retries: 5
       start_period: 10s
 
+  # TLS termination for the FHIR facade (HIPAA 164.312(e)(1) transmission
+  # security). Local CA via Caddy's `tls internal`; swap in a real cert for
+  # anything beyond localhost.
+  serving-tls:
+    image: caddy:2.8.4
+    container_name: glucopulse-serving-tls
+    profiles: ["tools"]
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - serving
+
+  # Local FHIR server standing in for an EHR. Synthetic data only.
+  hapi-fhir:
+    image: hapiproject/hapi:v7.4.0
+    container_name: glucopulse-hapi-fhir
+    profiles: ["fhir"]
+    ports:
+      - "8090:8080"
+    environment:
+      hapi.fhir.fhir_version: R4
+      hapi.fhir.validation.requests_enabled: "true"
+      hapi.fhir.allow_external_references: "true"
+
 volumes:
+  audit_data:
+  caddy_data:
   kafka_data:
   timescaledb_data:
   grafana_data:

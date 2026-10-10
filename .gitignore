@@ -4,3 +4,4 @@ data/azt1d/
 .venv/
 __pycache__/
 *.pyc
+audit/

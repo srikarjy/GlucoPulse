@@ -164,6 +164,15 @@ glucopulse/
 
 ---
 
+## Healthcare Interoperability (FHIR, SMART, HIPAA controls)
+
+The serving layer also exposes a **FHIR R4 facade** (`/fhir`): CGM readings as `Observation` (LOINC 99504-3), pseudonymous `Patient`, a `$forecast` operation that returns the model's T+30/T+60 forecasts as `preliminary` Observations with `Device` and `Provenance`, and an `AuditEvent` feed. Access is SMART-scoped bearer-JWT (fail-closed), every call is written to a hash-chained, append-only audit log, and `ehr/sync.py` round-trips data with an EHR (verified against a local HAPI FHIR 7.4.0 server, synthetic data only).
+
+- [`docs/FHIR.md`](docs/FHIR.md) — resource mapping, endpoints, EHR round trip
+- [`docs/HIPAA_MAPPING.md`](docs/HIPAA_MAPPING.md) — Security Rule safeguards: what is implemented, what is not
+
+This **implements technical safeguards; it is not "HIPAA compliant"** (that is an organizational status) and it handles no PHI: the dataset is public and de-identified. Known gaps (encryption at rest, emergency access, bundled authorization server, CGM IG conformance) are listed in the mapping doc. `.venv/bin/pytest tests/healthcare -q` runs the suite.
+
 ## Prerequisites
 
 - Docker Desktop
