@@ -19,6 +19,7 @@ intervals.
 """
 
 import json
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -30,7 +31,7 @@ from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 from pytorch_forecasting import TemporalFusionTransformer
 
-app = FastAPI(title="GlucoPulse Inference API", version="1.0.0")
+app = FastAPI(title="GlucoPulse Inference API", version="1.1.0")
 
 MODEL_PATH = Path(__file__).parent.parent / "model" / "artifacts" / "tft.onnx"
 CHECKPOINT_PATH = Path(__file__).parent.parent / "model" / "artifacts" / "tft.ckpt"
@@ -275,18 +276,53 @@ async def health():
         return HealthResponse(status="unhealthy", model_loaded=False)
 
 
-@app.post("/predict", response_model=PredictionResponse)
-async def predict(request: InferenceRequest):
+def _predict_array(request: InferenceRequest) -> np.ndarray:
+    """Run whichever serving path fits the history length. Shape (1, 12, 7)."""
     if len(request.readings) == FULL_HISTORY_STEPS:
         session = get_session()
         inputs = prepare_inputs_onnx(request)
-        outputs = session.run(None, inputs)
-        prediction = outputs[0]  # Shape: (1, 12, 7) - 7 quantiles
-    else:
-        model = get_torch_model()
-        inputs = prepare_inputs_torch(request)
-        with torch.no_grad():
-            prediction = model(inputs).prediction.numpy()  # Shape: (1, 12, 7)
+        return session.run(None, inputs)[0]
+    model = get_torch_model()
+    inputs = prepare_inputs_torch(request)
+    with torch.no_grad():
+        return model(inputs).prediction.numpy()
+
+
+def fhir_forecast(readings: list) -> dict:
+    """Adapter for the FHIR facade: (time, mg/dL) pairs in, {horizon: (median,
+    p10, p90)} out. Computes delta/rolling features server-side with the same
+    definitions as spark/feature_job.py (sample stddev, windows of 3 and 12
+    rows). Insulin/carb covariates aren't carried by FHIR Observations, so
+    they're absent. The patient is encoded as unknown (index 0): an EHR
+    patient is out-of-sample by definition, and we don't expose the training
+    patient-id mapping."""
+    s = pd.Series([v for _, v in readings], dtype=float)
+    delta = s.diff()
+    m15, sd15 = s.rolling(3, min_periods=1).mean(), s.rolling(3, min_periods=1).std()
+    m60, sd60 = s.rolling(12, min_periods=1).mean(), s.rolling(12, min_periods=1).std()
+    clean = lambda x: None if pd.isna(x) else float(x)  # noqa: E731
+    req = InferenceRequest(
+        patient_id="unknown",
+        readings=[
+            GlucoseReading(
+                timestamp=t.isoformat().replace("+00:00", "Z"), glucose_value=v,
+                delta=clean(delta.iloc[i]),
+                rolling_mean_15=clean(m15.iloc[i]), rolling_std_15=clean(sd15.iloc[i]),
+                rolling_mean_60=clean(m60.iloc[i]), rolling_std_60=clean(sd60.iloc[i]),
+            )
+            for i, (t, v) in enumerate(readings)
+        ],
+    )
+    pred = _predict_array(req)
+    return {
+        h: (float(pred[0, idx, 3]), float(pred[0, idx, 1]), float(pred[0, idx, 5]))
+        for h, idx in ((30, 5), (60, 11))
+    }
+
+
+@app.post("/predict", response_model=PredictionResponse)
+async def predict(request: InferenceRequest):
+    prediction = _predict_array(request)  # Shape: (1, 12, 7) - 7 quantiles
 
     # Extract median (quantile 0.5 is at index 3 for 7 quantiles: 0.02, 0.1, 0.25, 0.5, 0.75, 0.9, 0.98)
     median_pred = prediction[0, :, 3]  # (12,)
@@ -317,15 +353,31 @@ async def predict(request: InferenceRequest):
     )
 
 
+def _install_healthcare() -> None:
+    """Mount the FHIR facade. Fully optional: the public demo image doesn't
+    ship the healthcare package's DB/auth config, and /predict is unaffected."""
+    from serving.healthcare import fhir_routes
+    from serving.healthcare.audit import AuditLogger
+    store = None
+    if os.getenv("PG_HOST"):
+        from serving.healthcare.pg_store import PostgresReadingStore
+        store = PostgresReadingStore.from_env()
+    fhir_routes.install(app, audit=AuditLogger(), forecast_fn=fhir_forecast, store=store)
+
+
+_install_healthcare()
+
+
 @app.get("/")
 async def root():
     return {
         "service": "GlucoPulse Inference API",
-        "version": "1.0.0",
+        "version": "1.1.0",
         "model": "Temporal Fusion Transformer (ONNX for 24-step history, PyTorch checkpoint fallback for shorter)",
         "endpoints": {
             "health": "/health",
             "predict": "/predict",
+            "fhir": "/fhir/metadata",
             "docs": "/docs",
         },
     }

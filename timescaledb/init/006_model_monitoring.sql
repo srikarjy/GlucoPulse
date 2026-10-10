@@ -7,7 +7,8 @@ CREATE TABLE IF NOT EXISTS patient_splits (
     assigned_at TIMESTAMPTZ DEFAULT NOW()
 );
 
-SELECT create_hypertable('patient_splits', 'assigned_at', if_not_exists => TRUE);
+-- patient_splits is a 25-row lookup table keyed by patient_id; it is not time-series
+-- and TimescaleDB rejects a hypertable whose unique key omits the time column.
 
 -- TFT model predictions for monitoring
 CREATE TABLE IF NOT EXISTS model_predictions (
@@ -90,11 +91,11 @@ GROUP BY bucket, patient_id, horizon_min;
 
 -- Add refresh policies (run every hour)
 SELECT add_continuous_aggregate_policy('model_metrics_1h',
-    start_offset => INTERVAL '2 hours',
+    start_offset => INTERVAL '3 hours',
     end_offset => INTERVAL '1 hour',
     schedule_interval => INTERVAL '1 hour');
 
 SELECT add_continuous_aggregate_policy('persistence_metrics_1h',
-    start_offset => INTERVAL '2 hours',
+    start_offset => INTERVAL '3 hours',
     end_offset => INTERVAL '1 hour',
     schedule_interval => INTERVAL '1 hour');
