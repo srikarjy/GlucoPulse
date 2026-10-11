@@ -11,7 +11,6 @@ because a coverage lookup must not be fooled by a nearby-sounding policy.
 from __future__ import annotations
 
 import hashlib
-import math
 import re
 from dataclasses import dataclass
 from typing import Protocol
@@ -92,12 +91,13 @@ class InMemoryVectorStore:
         return [(self._chunks[i], float(sims[i])) for i in idx]
 
 
-class PgVectorStore:  # pragma: no cover - needs Postgres+pgvector; see tests/priorauth/test_pgvector.py
+class PgVectorStore:  # pragma: no cover - needs Postgres+pgvector; see tests/priorauth/test_postgres.py
     def __init__(self, dsn: str, embedder: Embedder | None = None):
         import sqlalchemy as sa
         self.sa, self.emb = sa, embedder or HashEmbedder()
         self.engine = sa.create_engine(dsn, future=True)
         with self.engine.begin() as c:
+            c.execute(sa.text("SELECT pg_advisory_xact_lock(727003)"))   # worker + mcp boot together; DDL must not race
             c.execute(sa.text("CREATE EXTENSION IF NOT EXISTS vector"))
             c.execute(sa.text(f"CREATE TABLE IF NOT EXISTS policy_chunks (chunk_id text primary key, policy_id text, "
                               f"text text, embedding vector({self.emb.dim}))"))

@@ -34,3 +34,12 @@ def make_retriever() -> PolicyRetriever:
 
 def make_box(store: Store | None = None) -> ToolBox:
     return ToolBox(store or make_store(), make_fhir(), make_retriever())
+
+
+def make_orchestrator(box: ToolBox):
+    """PRIORAUTH_BACKEND=deterministic (default; no LLM) | bedrock (Strands agents over MCP at PRIORAUTH_MCP_URL)."""
+    from priorauth.agents.orchestrator import Orchestrator
+    if os.getenv("PRIORAUTH_BACKEND", "deterministic") == "bedrock":
+        from priorauth.agents.strands_backend import build_strands_agents
+        return Orchestrator(box, agents=build_strands_agents(os.environ["PRIORAUTH_MCP_URL"], box.store))
+    return Orchestrator(box)

@@ -13,12 +13,12 @@ import hashlib
 import json
 import threading
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta, UTC
 from typing import Any, Optional
 
 import sqlalchemy as sa
 
-from priorauth.schemas import (DraftRecommendation, FinalDecision, PARRequest, RequestStatus,
+from priorauth.schemas import (DraftRecommendation, PARRequest, RequestStatus,
                                ReviewDecision, ReviewTask)
 
 GENESIS = "0" * 64
@@ -54,7 +54,7 @@ audit_t = sa.Table("audit_log", md,
 
 
 def now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def iso(d: datetime) -> str:
@@ -86,7 +86,15 @@ class Store:
         # In-memory SQLite shares ONE DBAPI connection across threads, so reads must be serialised too
         # or they interleave with another thread's transaction. Real pools (Postgres, file SQLite) don't need it.
         self._shared_conn = url.startswith("sqlite") and ":memory:" in url
-        md.create_all(self.engine)
+        self._init_schema()
+
+    def _init_schema(self) -> None:
+        """Idempotent and safe when api/worker/mcp boot simultaneously (advisory lock serialises DDL).
+        Production should run versioned migrations (Alembic) as a separate deploy step instead."""
+        with self.engine.begin() as c:
+            if self.is_pg:
+                c.execute(sa.text("SELECT pg_advisory_xact_lock(727002)"))
+            md.create_all(c)
 
     @contextmanager
     def _read(self):

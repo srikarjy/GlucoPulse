@@ -1,32 +1,12 @@
 """Real MCP over streamable HTTP, driven by Strands' MCPClient, with per-role bearer tokens."""
-import socket
-import threading
-import time
 
 import httpx
-import pytest
-import uvicorn
 from mcp.client.streamable_http import streamablehttp_client
 from strands.tools.mcp import MCPClient
 
 from priorauth.mcp_server.auth import issue_token
-from priorauth.mcp_server.server import build_app
 from priorauth.mcp_server.tools import TOOLS
 from tests.priorauth.conftest import clean_meets
-
-
-@pytest.fixture()
-def server(box):
-    s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
-    cfg = uvicorn.Config(build_app(box), host="127.0.0.1", port=port, log_level="error")
-    srv = uvicorn.Server(cfg)
-    t = threading.Thread(target=srv.run, daemon=True); t.start()
-    for _ in range(100):
-        if srv.started:
-            break
-        time.sleep(0.05)
-    yield f"http://127.0.0.1:{port}/mcp", box
-    srv.should_exit = True; t.join(5)
 
 
 def client(url, role):

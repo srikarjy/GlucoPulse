@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import os
 import re
-from typing import Callable
+from collections.abc import Callable
 
 from mcp.client.streamable_http import streamablehttp_client
 from strands import Agent as StrandsAgent

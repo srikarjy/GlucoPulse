@@ -1,16 +1,21 @@
 import os
 import secrets
+import socket
+import threading
+import time
 
 import pytest
+import uvicorn
 
 os.environ.setdefault("PRIORAUTH_JWT_SECRET", secrets.token_hex(32))
 
-from priorauth.fhir import InMemoryFhirSource, facts_to_fhir          # noqa: E402
-from priorauth.mcp_server.tools import ToolBox                        # noqa: E402
-from priorauth.rag import PolicyRetriever                             # noqa: E402
-from priorauth.schemas import PARRequest                              # noqa: E402
-from priorauth.store import Store                                     # noqa: E402
-from priorauth.synth.scenarios import load                            # noqa: E402
+from priorauth.fhir import InMemoryFhirSource, facts_to_fhir
+from priorauth.mcp_server.server import build_app
+from priorauth.mcp_server.tools import ToolBox
+from priorauth.rag import PolicyRetriever
+from priorauth.schemas import PARRequest
+from priorauth.store import Store
+from priorauth.synth.scenarios import load
 
 _SC = load()
 
@@ -44,3 +49,17 @@ def submit(box):
         box.store.create_request(req)
         return req.request_id
     return _s
+
+
+@pytest.fixture()
+def server(box):
+    s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+    cfg = uvicorn.Config(build_app(box), host="127.0.0.1", port=port, log_level="error")
+    srv = uvicorn.Server(cfg)
+    t = threading.Thread(target=srv.run, daemon=True); t.start()
+    for _ in range(100):
+        if srv.started:
+            break
+        time.sleep(0.05)
+    yield f"http://127.0.0.1:{port}/mcp", box
+    srv.should_exit = True; t.join(5)

@@ -5,7 +5,6 @@ from priorauth.schemas import PARRequest
 from priorauth.store import jobs_t
 from priorauth.worker import Worker, process_one
 from tests.priorauth.conftest import by_profile
-import sqlalchemy as sa
 
 
 def test_retry_then_dead_letter(box):

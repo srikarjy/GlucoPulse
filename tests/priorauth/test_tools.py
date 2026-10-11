@@ -1,5 +1,4 @@
 import pytest
-from pydantic import ValidationError
 
 from priorauth.agents.base import gateway_for
 from priorauth.mcp_server.auth import AuthError, ForbiddenError, issue_token, verify
@@ -73,7 +72,10 @@ def test_tokens_audience_bound_and_scope_claims_ignored():
     mcp_tok = issue_token("evidence-agent")
     with pytest.raises(AuthError):
         verify(mcp_tok, aud="priorauth-api")
-    import jwt, os, time
+    import os
+    import time
+
+    import jwt
     forged = jwt.encode({"sub": "x", "role": "intake-agent", "scope": "chart:read draft:write", "aud": "priorauth-mcp",
                          "exp": int(time.time()) + 60}, os.environ["PRIORAUTH_JWT_SECRET"], algorithm="HS256")
     assert "chart:read" not in verify(forged).scopes
@@ -96,7 +98,6 @@ def test_audit_never_contains_clinical_text(box, submit):
 
 
 def test_draft_is_grounded_model_cannot_fabricate_evidence_or_be_more_favourable(box, submit):
-    from priorauth.schemas import CriterionResult
     s = by_profile("missing")[0]
     rid = submit(s)
     gw = gateway_for(box, "drafting-agent")

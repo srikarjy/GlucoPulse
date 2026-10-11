@@ -45,7 +45,7 @@ class Worker:
             if outcome is None:
                 try:
                     await asyncio.wait_for(stop.wait(), timeout=self.poll)
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     pass
 
     async def run(self, stop: asyncio.Event | None = None) -> None:
@@ -60,9 +60,15 @@ class Worker:
 
 
 def main() -> None:  # pragma: no cover
-    from priorauth.bootstrap import make_box
+    import os
+    from prometheus_client import start_http_server
+    from priorauth.bootstrap import make_box, make_orchestrator
+    from priorauth.observability import REGISTRY
+    from priorauth.telemetry_setup import setup_tracing
+    setup_tracing("priorauth-worker")
+    start_http_server(int(os.getenv("PRIORAUTH_WORKER_METRICS_PORT", "9102")), registry=REGISTRY)
     box = make_box()
-    asyncio.run(Worker(box.store, Orchestrator(box)).run())
+    asyncio.run(Worker(box.store, make_orchestrator(box), concurrency=int(os.getenv("PRIORAUTH_WORKER_CONCURRENCY", "4"))).run())
 
 
 if __name__ == "__main__":  # pragma: no cover

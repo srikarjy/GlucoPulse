@@ -14,14 +14,16 @@ import inspect
 import re
 import typing
 from datetime import date
-from typing import Any, Callable, Optional
+from typing import Any, Optional
+from collections.abc import Callable
 
 from pydantic import ValidationError
 
 from priorauth.criteria import evaluate_policy, find_injections, overall
 from priorauth.fhir import AS_OF_DEFAULT, Chart, FhirSource, parse_chart
-from priorauth.mcp_server.auth import (AuthError, ForbiddenError, Principal, current_principal,
+from priorauth.mcp_server.auth import (ForbiddenError, Principal, current_principal,
                                        reset_principal, set_principal)
+from priorauth.observability import TOOL_CALLS
 from priorauth.rag import PolicyRetriever
 from priorauth.safety import calibrate_confidence, route
 from priorauth.schemas import (CriterionResult, DraftRecommendation, Recommendation, ReviewTask)
@@ -71,6 +73,7 @@ class ToolBox:
         p: Principal = current_principal()
         if spec["scope"] not in p.scopes:
             self.store.audit(p.subject, "tool.denied", name, {"scope": spec["scope"]})
+            TOOL_CALLS.labels(name, "denied").inc()
             raise ForbiddenError(f"{p.role} lacks scope {spec['scope']}")
         kwargs = dict(kwargs)
         idem = kwargs.get("idempotency_key")
@@ -84,16 +87,19 @@ class ToolBox:
                 raise ToolError(str(e)) from e
             if cached is not None:
                 self.store.audit(p.subject, "tool.replayed", name, {"idempotency_key": idem})
+                TOOL_CALLS.labels(name, "replayed").inc()
                 return cached
         subject = kwargs.get("request_id") or kwargs.get("patient_ref") or name
         try:
             out = spec["fn"](self, **kwargs)
         except (ToolError, ValidationError):
             self.store.audit(p.subject, "tool.error", subject, {"tool": name})
+            TOOL_CALLS.labels(name, "error").inc()
             raise
         if spec["mutating"]:
             self.store.idem_store(p.subject, name, idem, ah, out)
         self.store.audit(p.subject, "tool.call", subject, {"tool": name, "args_hash": ah[:16]})
+        TOOL_CALLS.labels(name, "ok").inc()
         return out
 
     # ----- read tools -----

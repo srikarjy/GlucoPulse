@@ -19,7 +19,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 from priorauth.schemas import PARRequest
-from priorauth.synth.policies import POLICIES, BY_ID
+from priorauth.synth.policies import POLICIES
 
 AS_OF = date(2026, 1, 15)
 SEED = 20260115

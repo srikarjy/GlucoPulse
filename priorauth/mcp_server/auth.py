@@ -115,7 +115,7 @@ class BearerASGI:
             if not hdr.lower().startswith("bearer "):
                 raise AuthError("missing bearer token")
             p = verify(hdr[7:])
-        except AuthError as e:
+        except AuthError:
             body = b'{"error":"unauthorized"}'
             await send({"type": "http.response.start", "status": 401,
                         "headers": [(b"content-type", b"application/json"), (b"content-length", str(len(body)).encode())]})

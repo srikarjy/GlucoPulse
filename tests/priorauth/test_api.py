@@ -74,7 +74,7 @@ def test_end_to_end_submit_process_review_decide(client, box, scenarios):
 
 
 def test_denial_and_physician_tier_require_physician(client, box):
-    rid = _flow(client, box, by_profile("fail")[0])
+    _flow(client, box, by_profile("fail")[0])
     tid = client.get("/v1/reviews", headers=H("reviewer-rn")).json()[0]["task_id"]
     assert client.post(f"/v1/reviews/{tid}/claim", headers=H("reviewer-rn", "alice")).status_code == 403      # MD-tier
     assert client.post(f"/v1/reviews/{tid}/claim", headers=H("reviewer-md", "carol")).status_code == 200
@@ -94,7 +94,6 @@ def test_audit_requires_role_and_chain_verifies_and_detects_tampering(client, bo
     _flow(client, box, by_profile("meets")[0])
     assert client.get("/v1/audit", headers=H("reviewer-md")).status_code == 403
     assert client.get("/v1/audit/verify", headers=H("auditor")).json()["intact"] is True
-    import sqlalchemy as sa
     from priorauth.store import audit_t
     with box.store.engine.begin() as c:
         c.execute(audit_t.update().where(audit_t.c.seq == 2).values(entry={"tampered": True}))

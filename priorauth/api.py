@@ -13,7 +13,7 @@ from __future__ import annotations
 import uuid
 from typing import Optional
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Query, Request, Response
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
 
@@ -146,4 +146,6 @@ def create_app(store: Store) -> FastAPI:
 
 def app_factory():  # pragma: no cover - uvicorn --factory priorauth.api:app_factory
     from priorauth.bootstrap import make_store
+    from priorauth.telemetry_setup import setup_tracing
+    setup_tracing("priorauth-api")
     return create_app(make_store())

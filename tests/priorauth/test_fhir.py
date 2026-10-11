@@ -1,7 +1,6 @@
 import httpx
 
 from priorauth.fhir import HttpFhirSource, facts_to_fhir, parse_chart
-from priorauth.synth.scenarios import load
 
 
 def test_http_source_pages_and_maps_like_inmemory(scenarios):

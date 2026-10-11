@@ -6,7 +6,6 @@ It does NOT prove LLM quality; that needs a live-model eval run (see docs/priora
 import json
 import uuid
 
-import pytest
 from strands.models import Model
 
 from priorauth.agents.orchestrator import Orchestrator
@@ -14,7 +13,6 @@ from priorauth.agents.strands_backend import build_strands_agents, tools_for_rol
 from priorauth.mcp_server.tools import TOOLS
 from priorauth.schemas import PARRequest, ReviewTier
 from tests.priorauth.conftest import by_profile, clean_meets
-from tests.priorauth.test_mcp_transport import server  # noqa: F401  (fixture)
 
 
 class ScriptedModel(Model):
