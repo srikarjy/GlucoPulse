@@ -96,3 +96,15 @@ def test_model_that_skips_escalation_fails_closed_to_physician(server):
     box, rid = run(server, clean_meets(), DRAFT, escalate=False)
     t = box.store.get_task(f"TASK-{rid}")
     assert t.tier == ReviewTier.PHYSICIAN and "flag:agent_failure" in t.reasons
+
+
+def test_eval_harness_can_drive_the_llm_backend_end_to_end():
+    """Wiring test for `run_eval --backend bedrock` with scripted models (no AWS, no cost). Not an LLM-quality measurement."""
+    from priorauth.eval.llm_backend import make_factory
+    from priorauth.eval.run_eval import run
+    s = clean_meets()
+    rid, pid, pol = s["request"]["request_id"], s["request"]["patient_ref"], s["expected"]["policy_id"]
+    sc = scripts(rid, pid, pol, DRAFT)
+    r = run([s], orchestrator_factory=make_factory(per_stage=lambda name: (lambda t=sc[name]: ScriptedModel(t))))
+    assert r["n"] == 1 and r["safety"]["human_review_rate"] == 1.0 and r["safety"]["no_final_decisions_by_agents"] == 1.0
+    assert r["recommendation_accuracy"] == 1.0

@@ -120,6 +120,34 @@ class PgVectorStore:  # pragma: no cover - needs Postgres+pgvector; see tests/pr
             return [(Chunk(r.chunk_id, r.policy_id, r.text), float(r.sim)) for r in rows]
 
 
+class OpenSearchVectorStore:
+    """OpenSearch k-NN (HNSW, cosine) -- the managed-AWS alternative to pgvector (Amazon OpenSearch Service/Serverless).
+    Same interface as the other stores; select with PRIORAUTH_VECTOR_BACKEND=opensearch."""
+
+    def __init__(self, url: str, index: str = "priorauth-policy-chunks", embedder: Embedder | None = None, **client_kw):
+        from opensearchpy import OpenSearch
+        self.emb, self.index = embedder or HashEmbedder(), index
+        self.client = OpenSearch(hosts=[url], **client_kw)
+        if not self.client.indices.exists(index=index):
+            self.client.indices.create(index=index, body={
+                "settings": {"index": {"knn": True}},
+                "mappings": {"properties": {
+                    "policy_id": {"type": "keyword"}, "text": {"type": "text"},
+                    "embedding": {"type": "knn_vector", "dimension": self.emb.dim,
+                                  "method": {"name": "hnsw", "space_type": "cosinesimil", "engine": "lucene"}}}}})
+
+    def upsert(self, chunks: list[Chunk]) -> None:
+        from opensearchpy import helpers
+        helpers.bulk(self.client, ({"_index": self.index, "_id": c.chunk_id,
+                                    "_source": {"policy_id": c.policy_id, "text": c.text, "embedding": self.emb.embed(c.text).tolist()}}
+                                   for c in chunks), refresh=True)
+
+    def search(self, query: str, k: int = 5) -> list[tuple[Chunk, float]]:
+        r = self.client.search(index=self.index, body={"size": k, "query": {"knn": {"embedding": {"vector": self.emb.embed(query).tolist(), "k": k}}}})
+        # Lucene cosinesimil score = (1 + cos) / 2  ->  recover cosine so scores are comparable across backends
+        return [(Chunk(h["_id"], h["_source"]["policy_id"], h["_source"]["text"]), 2 * h["_score"] - 1) for h in r["hits"]["hits"]]
+
+
 class PolicyRetriever:
     def __init__(self, store=None, policies: list[Policy] = POLICIES):
         self.policies = {p.policy_id: p for p in policies}

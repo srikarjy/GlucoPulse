@@ -1,0 +1,36 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata: { name: pa-api }
+spec:
+  scaleTargetRef: { apiVersion: apps/v1, kind: Deployment, name: pa-api }
+  minReplicas: 2
+  maxReplicas: 8
+  metrics: [{ type: Resource, resource: { name: cpu, target: { type: Utilization, averageUtilization: 60 } } }]
+---
+# Workers scale on real backlog (queued jobs), not CPU. Requires KEDA.
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata: { name: pa-worker }
+spec:
+  scaleTargetRef: { name: pa-worker }
+  minReplicaCount: 2
+  maxReplicaCount: 20
+  cooldownPeriod: 120
+  triggers:
+    - type: postgresql
+      metadata:
+        host: priorauth.cluster-xxxx.us-east-1.rds.amazonaws.com
+        port: "5432"
+        dbName: priorauth
+        userName: priorauth
+        sslmode: require
+        query: "SELECT count(*) FROM jobs WHERE state = 'queued' AND visible_at <= to_char(now() at time zone 'utc', 'YYYY-MM-DD\"T\"HH24:MI:SS.US') || '+00:00'"
+        targetQueryValue: "5"
+      authenticationRef: { name: pa-keda-auth }
+---
+apiVersion: keda.sh/v1alpha1
+kind: TriggerAuthentication
+metadata: { name: pa-keda-auth }
+spec:
+  secretTargetRef:
+    - { parameter: password, name: pa-secrets, key: PRIORAUTH_DB_PASSWORD }

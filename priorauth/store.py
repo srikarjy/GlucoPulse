@@ -315,6 +315,20 @@ class Store:
                 visible_at=iso(now() + timedelta(seconds=backoff_seconds * row[0]))))
             return "queued"
 
+    def requeue_dead(self, kind: Optional[str] = None) -> int:
+        """Operator action: give dead-lettered jobs a fresh attempt budget. Requests marked FAILED return to RECEIVED."""
+        with self._lock, self.engine.begin() as c:
+            q = sa.select(jobs_t.c.job_id, jobs_t.c.payload).where(jobs_t.c.state == "dead")
+            if kind:
+                q = q.where(jobs_t.c.kind == kind)
+            rows = c.execute(q).all()
+            for jid, payload in rows:
+                c.execute(jobs_t.update().where(jobs_t.c.job_id == jid).values(state="queued", attempts=0, visible_at=iso(now()), leased_until=None))
+                if payload.get("request_id"):
+                    self.set_status(payload["request_id"], RequestStatus.RECEIVED, conn=c)
+                self.audit("operator", "job.requeued", jid, conn=c)
+            return len(rows)
+
     def job_counts(self) -> dict[str, int]:
         with self._read() as c:
             return {s: n for s, n in c.execute(sa.select(jobs_t.c.state, sa.func.count()).group_by(jobs_t.c.state))}

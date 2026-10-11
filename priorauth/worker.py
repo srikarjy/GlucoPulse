@@ -32,7 +32,12 @@ def process_one(store: Store, orch: Orchestrator) -> str | None:
         return "done"
     except Exception as e:   # noqa: BLE001
         log.exception("job %s failed", job["job_id"])
-        return store.fail_job(job["job_id"], f"{type(e).__name__}: {e}")
+        outcome = store.fail_job(job["job_id"], f"{type(e).__name__}: {e}")
+        if outcome == "dead" and job["kind"] == "process_request" and job["payload"].get("request_id"):
+            # Retries exhausted (even the fail-closed fallback raised). Never leave the request silently "processing".
+            store.set_status(job["payload"]["request_id"], RequestStatus.FAILED)
+            store.audit("worker", "request.failed", job["payload"]["request_id"], {"job_id": job["job_id"]})
+        return outcome
 
 
 class Worker:

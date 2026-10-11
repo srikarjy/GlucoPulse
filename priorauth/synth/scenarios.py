@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import json
 import random
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, UTC
 from pathlib import Path
 
 from priorauth.schemas import PARRequest
@@ -33,18 +33,28 @@ DRUG_FOR_CLASS = {
     "nsaid": ["ibuprofen", "naproxen"], "metformin": ["metformin"], "insulin": ["insulin glargine"],
     "methotrexate": ["methotrexate"], "corticosteroid-injection": ["triamcinolone injection"],
 }
-UNLABELED_PARAPHRASE = {  # clinically equivalent wording that contains NO policy keyword
-    "physical therapy": "completed a course of PT", "home exercise": "performing prescribed exercises at home",
-    "kellgren": "radiograph shows severe tibiofemoral degeneration", "bone-on-bone": "no remaining cartilage space on radiograph",
-    "joint space narrowing": "marked loss of cartilage height on imaging", "das28": "disease activity measured on composite index",
-    "cdai": "clinical disease activity composite recorded", "face-to-face": "seen by me today for evaluation",
-    "in-person visit": "seen in clinic today", "office visit": "patient examined in clinic",
-    "diabetes education": "attended structured self-management classes", "dsme": "completed self-management curriculum",
-    "epworth": "sleepiness questionnaire score 14", "supervised diet": "six months of dietitian-led weight management",
-    "medically supervised weight": "dietitian-led weight management program", "genetic counseling": "met with a hereditary risk counselor",
-    "functional progress": "can now walk twice as far as at baseline", "improved range of motion": "knee flexion increased by 20 degrees",
-    "improved strength": "quadriceps strength grade up from 3 to 4",
+PARAPHRASES = {  # per keyword: [variant0 (eval vocabulary), variant1, variant2 (fine-tuning only)]. None contain any policy keyword
+    "physical therapy": ["completed a course of PT", "finished several weeks of rehab exercises with a therapist", "attended outpatient PT sessions twice weekly"],
+    "home exercise": ["performing prescribed exercises at home", "doing the stretching program at home daily", "follows an at-home stretching regimen"],
+    "kellgren": ["radiograph shows severe tibiofemoral degeneration", "films demonstrate advanced degenerative change of the knee", "x-ray shows grade 4 osteoarthritic change"],
+    "bone-on-bone": ["no remaining cartilage space on radiograph", "complete loss of medial compartment cartilage on x-ray", "no visible cartilage space between femur and tibia"],
+    "joint space narrowing": ["marked loss of cartilage height on imaging", "cartilage thickness markedly reduced on films", "significant reduction of the articular gap on imaging"],
+    "das28": ["disease activity measured on composite index", "composite RA activity index recorded as high", "rheumatoid activity composite score documented today"],
+    "cdai": ["clinical disease activity composite recorded", "clinical activity composite for RA recorded", "composite clinical activity measure elevated"],
+    "face-to-face": ["seen by me today for evaluation", "I examined the patient in person today", "patient evaluated directly by me during this encounter"],
+    "in-person visit": ["seen in clinic today", "patient was examined in the office", "evaluated in clinic during this encounter"],
+    "office visit": ["patient examined in clinic", "patient evaluated in our clinic this week", "examined during a clinic appointment"],
+    "diabetes education": ["attended structured self-management classes", "completed a diabetes self-care curriculum", "finished the structured glucose management course"],
+    "dsme": ["completed self-management curriculum", "completed formal self-care training for diabetes", "finished certified self-management coursework"],
+    "epworth": ["sleepiness questionnaire score 14", "daytime sleepiness scale score of 15 recorded", "sleepiness rating scale elevated at 13"],
+    "supervised diet": ["six months of dietitian-led weight management", "twelve months with a registered dietitian on a calorie plan", "structured nutrition program monitored by dietitian"],
+    "medically supervised weight": ["dietitian-led weight management program", "physician-monitored weight loss program for six months", "clinic-run nutrition and weight program completed"],
+    "genetic counseling": ["met with a hereditary risk counselor", "saw a hereditary cancer counselor before testing", "pre-test counseling with a genetics specialist completed"],
+    "functional progress": ["can now walk twice as far as at baseline", "now climbs a flight of stairs unaided, previously could not", "walking tolerance doubled since start of therapy"],
+    "improved range of motion": ["knee flexion increased by 20 degrees", "knee bends 25 degrees further than at intake", "shoulder elevation increased measurably"],
+    "improved strength": ["quadriceps strength grade up from 3 to 4", "manual muscle testing improved by one grade", "grip and quadriceps strength better than baseline"],
 }
+UNLABELED_PARAPHRASE = {k: v[0] for k, v in PARAPHRASES.items()}
 SERVICE_DESC = {
     "SYN-MRI-LSPINE": "magnetic resonance imaging of the lumbar spine for persistent low back pain",
     "SYN-GLP1-T2D": "weekly injectable GLP-1 agonist for glycemic control in type 2 diabetes",
@@ -77,7 +87,7 @@ class Facts(dict):
     pass
 
 
-def _compliant(policy, rng: random.Random, borderline=False, paraphrase=False) -> dict:
+def _compliant(policy, rng: random.Random, borderline=False, paraphrase=False, variants=(0,)) -> dict:
     age = rng.randint(30, 75)
     f = {"age": age, "gender": rng.choice(["male", "female"]), "conditions": [], "meds": [], "obs": [], "notes": [],
          "coverage_active": True}
@@ -101,7 +111,8 @@ def _compliant(policy, rng: random.Random, borderline=False, paraphrase=False) -
         elif c.kind == "documentation":
             kw = rng.choice(p["keywords"])
             if paraphrase:
-                kw = UNLABELED_PARAPHRASE[kw]
+                alts = PARAPHRASES[kw]
+                kw = alts[variants[0]] if len(variants) == 1 else alts[random.Random(f"{kw}-{len(kw_used)}-{rng.random()}").choice(variants)]
                 applied.append(True)
             kw_used.append(kw)
     # durations: set onset on the matching dx
@@ -160,14 +171,15 @@ def _build_request(i, policy_code, desc, dx_codes) -> PARRequest:
     return PARRequest(request_id=f"REQ-{i:04d}", patient_ref=f"syn-{i:04d}", service_code=policy_code,
                       service_description=desc, diagnosis_codes=dx_codes,
                       provider_npi=f"1{i:09d}", urgency="expedited" if i % 11 == 0 else "standard",
+                      submitted_at=datetime(AS_OF.year, AS_OF.month, AS_OF.day, tzinfo=UTC),   # fixed: file must be reproducible
                       free_text="Letter of medical necessity: patient requires the requested service.")
 
 
-def generate(seed: int = SEED) -> list[dict]:
+def generate(seed: int = SEED, scale: int = 1, variants: tuple = (0,), prefix: str = "S") -> list[dict]:
     rng = random.Random(seed)
     labelled: list[str] = []
     for name, n in PROFILES:
-        labelled += [name] * n
+        labelled += [name] * n * scale
     rng.shuffle(labelled)
     lab_policies = [p for p in POLICIES if any(c.kind == "lab_threshold" for c in p.criteria)]
     out = []
@@ -177,7 +189,7 @@ def generate(seed: int = SEED) -> list[dict]:
         broken = None
         rec = "supports_approval"
         paraphrase = profile in ("meets", "borderline") and rng.random() < 0.25
-        f = _compliant(policy, rng, borderline=(profile == "borderline"), paraphrase=paraphrase)
+        f = _compliant(policy, rng, borderline=(profile == "borderline"), paraphrase=paraphrase, variants=variants)
         code = policy.service_codes[0]
         dx = [c["code"] for c in f["conditions"]]
         if profile == "fail":
@@ -204,7 +216,7 @@ def generate(seed: int = SEED) -> list[dict]:
             code = "99999"; flags = ["no_policy"]; rec = "insufficient_info"; policy = None
         req = _build_request(i, code, SERVICE_DESC.get(policy.policy_id, "unlisted experimental procedure") if policy else "unlisted experimental procedure", dx)
         out.append({
-            "scenario_id": f"S{i:03d}", "profile": profile, "paraphrased_evidence": bool(f.pop("_paraphrased", False)),
+            "scenario_id": f"{prefix}{i:04d}" if scale > 1 else f"{prefix}{i:03d}", "profile": profile, "paraphrased_evidence": bool(f.pop("_paraphrased", False)),
             "request": json.loads(req.model_dump_json()), "facts": f,
             "expected": {"policy_id": policy.policy_id if policy else None, "recommendation": rec,
                          "flags": flags, "broken_criterion": broken},

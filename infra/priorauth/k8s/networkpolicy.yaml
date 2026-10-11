@@ -1,0 +1,48 @@
+# Default deny, then open exactly the edges the architecture needs.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: default-deny }
+spec: { podSelector: {}, policyTypes: [Ingress, Egress] }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: mcp-only-from-worker }
+spec:
+  podSelector: { matchLabels: { app: pa-mcp } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ podSelector: { matchLabels: { app: pa-worker } } }]
+      ports: [{ port: 8765 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: api-from-ingress-and-prometheus }
+spec:
+  podSelector: { matchLabels: { app: pa-api } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: kube-system } } }, { namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: observability } } }]
+      ports: [{ port: 8080 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: worker-metrics-from-prometheus }
+spec:
+  podSelector: { matchLabels: { app: pa-worker } }
+  policyTypes: [Ingress]
+  ingress:
+    - from: [{ namespaceSelector: { matchLabels: { kubernetes.io/metadata.name: observability } } }]
+      ports: [{ port: 9102 }]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata: { name: egress-dns-db-https-mcp }
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to: [{ namespaceSelector: {}, podSelector: { matchLabels: { k8s-app: kube-dns } } }]
+      ports: [{ port: 53, protocol: UDP }, { port: 53, protocol: TCP }]
+    - ports: [{ port: 5432 }, { port: 443 }, { port: 4318 }]            # RDS, AWS APIs (Bedrock/Secrets), OTLP
+    - to: [{ podSelector: { matchLabels: { app: pa-mcp } } }]
+      ports: [{ port: 8765 }]

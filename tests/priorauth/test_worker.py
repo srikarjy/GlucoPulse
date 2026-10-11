@@ -74,3 +74,20 @@ def test_file_backed_store_non_shared_connection_path(tmp_path, scenarios):
     orch = Orchestrator(box)
     assert [process_one(store, orch) for _ in range(8)] == ["done"] * 8
     assert len(store.list_tasks("open")) == 8 and store.verify_audit_chain()[0]
+
+
+def test_dead_lettered_request_is_marked_failed_and_replayable(box, scenarios):
+    s = scenarios[0]
+    box.store.create_request(PARRequest.model_validate(s["request"]))
+    class Broken:                                    # even fail-closed cannot save this one: orchestrator itself explodes
+        def run(self, rid): raise RuntimeError("db down")
+    with box.store.engine.begin() as c:
+        c.execute(jobs_t.update().values(max_attempts=1))
+    assert process_one(box.store, Broken()) == "dead"
+    rid = s["request"]["request_id"]
+    assert box.store.get_request(rid)[1] == "failed"
+    assert any(e["action"] == "request.failed" for e in box.store.audit_entries())
+    assert box.store.requeue_dead() == 1
+    assert box.store.get_request(rid)[1] == "received"
+    assert process_one(box.store, Orchestrator(box)) == "done"
+    assert box.store.get_task(f"TASK-{rid}") is not None

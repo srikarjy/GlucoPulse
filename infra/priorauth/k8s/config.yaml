@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: pa-config }
+data:
+  PRIORAUTH_DB_HOST: "priorauth.cluster-xxxx.us-east-1.rds.amazonaws.com"
+  PRIORAUTH_DB_NAME: "priorauth"
+  PRIORAUTH_DB_USER: "priorauth"
+  PRIORAUTH_BACKEND: "deterministic"          # bedrock enables Strands agents
+  PRIORAUTH_MCP_URL: "http://pa-mcp:8765/mcp"
+  PRIORAUTH_ENV: "staging"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://otel-collector.observability:4318"

@@ -9,8 +9,21 @@ from priorauth.rag import PolicyRetriever
 from priorauth.store import Store
 
 
+def database_url() -> str:
+    """PRIORAUTH_DATABASE_URL wins; else assemble from PRIORAUTH_DB_* (ECS injects the password from Secrets Manager).
+    Assembled URLs require TLS (RDS is configured with rds.force_ssl=1) and escape the password."""
+    if os.getenv("PRIORAUTH_DATABASE_URL"):
+        return os.environ["PRIORAUTH_DATABASE_URL"]
+    if os.getenv("PRIORAUTH_DB_HOST"):
+        from urllib.parse import quote
+        return (f"postgresql+psycopg://{quote(os.environ['PRIORAUTH_DB_USER'], safe='')}:{quote(os.environ['PRIORAUTH_DB_PASSWORD'], safe='')}"
+                f"@{os.environ['PRIORAUTH_DB_HOST']}:{os.getenv('PRIORAUTH_DB_PORT', '5432')}/{os.environ['PRIORAUTH_DB_NAME']}"
+                f"?sslmode={os.getenv('PRIORAUTH_DB_SSLMODE', 'require')}")
+    return "sqlite:///priorauth.db"
+
+
 def make_store() -> Store:
-    return Store(os.getenv("PRIORAUTH_DATABASE_URL", "sqlite:///priorauth.db"))
+    return Store(database_url())
 
 
 def make_fhir() -> FhirSource:
@@ -25,7 +38,10 @@ def make_fhir() -> FhirSource:
 
 
 def make_retriever() -> PolicyRetriever:
-    dsn = os.getenv("PRIORAUTH_PGVECTOR_URL")
+    if os.getenv("PRIORAUTH_VECTOR_BACKEND") == "opensearch":
+        from priorauth.rag import OpenSearchVectorStore
+        return PolicyRetriever(OpenSearchVectorStore(os.environ["PRIORAUTH_OPENSEARCH_URL"]))
+    dsn = os.getenv("PRIORAUTH_PGVECTOR_URL") or (database_url() if database_url().startswith("postgresql") else None)
     if dsn:
         from priorauth.rag import PgVectorStore
         return PolicyRetriever(PgVectorStore(dsn))
