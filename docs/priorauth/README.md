@@ -47,7 +47,7 @@ python -m priorauth.scripts.smoke                                  # end-to-end 
 
 | Area | Status | Evidence |
 |---|---|---|
-| 5 agents, 16 MCP tools, scopes, idempotency, audit chain | **Verified** | `tests/priorauth/` (unit + real MCP-over-HTTP with Strands' `MCPClient`) |
+| 5 agents, 17 MCP tools, scopes, idempotency, audit chain | **Verified** | `tests/priorauth/` (unit + real MCP-over-HTTP with Strands' `MCPClient`) |
 | Strands agent loop → MCP → grounded draft → escalation | **Verified with a scripted model, and live on Bedrock (small sample)** | `test_strands_backend.py`; Claude Haiku 4.5, 16-scenario focus sample + re-runs, ~$1.8 total. Not a full 200-scenario LLM run |
 | Postgres queue (`SKIP LOCKED`), audit chain under concurrency, pgvector HNSW | **Verified** on real Postgres 16 | `test_postgres.py`, with negative controls proving the tests can fail |
 | OpenSearch k-NN retrieval | **Verified** on real OpenSearch 2.17 | `test_opensearch.py` (ranking parity with in-memory) |
