@@ -53,6 +53,7 @@ python -m priorauth.scripts.smoke                                  # end-to-end 
 | OpenSearch k-NN retrieval | **Verified** on real OpenSearch 2.17 | `test_opensearch.py` (ranking parity with in-memory) |
 | FHIR read integration | **Verified** against real HAPI 7.4.0 | `test_hapi.py`. Read-only; no SMART/OAuth handshake, no Epic/Cerner sandbox |
 | Docker stack, metrics, alerts, dashboard, traces | **Verified** on OrbStack | `priorauth.scripts.smoke`; Jaeger shows `pipeline` + 5 `agent.*` spans |
+| Web UI (workbench + playground) | **Verified** (15 Playwright tests against the real demo stack, incl. axe a11y) | [FRONTEND.md](FRONTEND.md); desktop only, no manual a11y review, deterministic agents only |
 | Containers as non-root, read-only rootfs, all caps dropped | **Verified** | ran API/worker/MCP + pipeline under those flags |
 | 200-scenario eval | **Verified** (deterministic backend) | [EVALUATION.md](EVALUATION.md); read its limits section |
 | Terraform (ECS/RDS/ALB/KMS…), K8s manifests (EKS) | **Statically validated only** | `terraform validate`, `kubeconform`; KEDA query tested on real Postgres. **Never applied to AWS.** |
@@ -63,5 +64,5 @@ python -m priorauth.scripts.smoke                                  # end-to-end 
 
 ## Documents
 
-[ARCHITECTURE](ARCHITECTURE.md) · [SAFETY](SAFETY.md) · [SECURITY](SECURITY.md) · [MCP_TOOLS](MCP_TOOLS.md) · [EVALUATION](EVALUATION.md) ·
+[FRONTEND](FRONTEND.md) · [ARCHITECTURE](ARCHITECTURE.md) · [SAFETY](SAFETY.md) · [SECURITY](SECURITY.md) · [MCP_TOOLS](MCP_TOOLS.md) · [EVALUATION](EVALUATION.md) ·
 [FINETUNING](FINETUNING.md) · [OBSERVABILITY](OBSERVABILITY.md) · [DEPLOYMENT](DEPLOYMENT.md) · [RUNBOOK](RUNBOOK.md)

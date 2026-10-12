@@ -52,6 +52,7 @@ jobs_t = sa.Table("jobs", md,
     sa.Column("leased_until", sa.String, nullable=True), sa.Column("last_error", sa.String, nullable=True))
 audit_t = sa.Table("audit_log", md,
     sa.Column("seq", sa.Integer, primary_key=True, autoincrement=True), sa.Column("entry", sa.JSON),
+    sa.Column("subject", sa.String, index=True, nullable=True),
     sa.Column("prev_hash", sa.String), sa.Column("entry_hash", sa.String))
 
 
@@ -117,7 +118,7 @@ class Store:
             prev = row[0] if row else GENESIS
             entry = {"ts": iso(now()), "actor": actor, "action": action, "subject": subject, "detail": detail or {}}
             h = hashlib.sha256((prev + _canon(entry)).encode()).hexdigest()
-            c.execute(audit_t.insert().values(entry=entry, prev_hash=prev, entry_hash=h))
+            c.execute(audit_t.insert().values(entry=entry, subject=subject, prev_hash=prev, entry_hash=h))
             return {**entry, "entry_hash": h}
         if conn is not None:
             return _do(conn)
@@ -134,11 +135,13 @@ class Store:
                 prev = eh
         return True, None
 
-    def audit_entries(self, subject: Optional[str] = None, limit: int = 200) -> list[dict]:
-        q = sa.select(audit_t.c.seq, audit_t.c.entry, audit_t.c.entry_hash).order_by(audit_t.c.seq.desc()).limit(limit)
+    def audit_entries(self, subject: Optional[str] = None, limit: int = 200, ascending: bool = False) -> list[dict]:
+        q = sa.select(audit_t.c.seq, audit_t.c.entry, audit_t.c.entry_hash)
+        if subject is not None:
+            q = q.where(audit_t.c.subject == subject)       # filtered in SQL: a busy log must not hide a request's history
+        q = q.order_by(audit_t.c.seq if ascending else audit_t.c.seq.desc()).limit(limit)
         with self._read() as c:
-            rows = [{"seq": s, **e, "entry_hash": h} for s, e, h in c.execute(q)]
-        return [r for r in rows if subject is None or r["subject"] == subject]
+            return [{"seq": s, **e, "entry_hash": h} for s, e, h in c.execute(q)]
 
     # ---------------- requests ----------------
     def create_request(self, req: PARRequest, client_key: Optional[str] = None) -> tuple[PARRequest, bool]:

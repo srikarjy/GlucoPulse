@@ -10,3 +10,4 @@ priorauth/finetune/data/
 priorauth.db
 *.tfstate*
 .terraform/
+demo.db

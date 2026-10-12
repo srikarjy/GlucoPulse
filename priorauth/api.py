@@ -10,6 +10,7 @@ requires a human reviewer principal. Denials additionally require `review:decide
 """
 from __future__ import annotations
 
+import os
 import uuid
 from typing import Optional
 
@@ -41,7 +42,12 @@ class DecisionIn(BaseModel):
     comment: str = Field("", max_length=4000)
 
 
-def create_app(store: Store) -> FastAPI:
+TIMELINE_ACTIONS = {"request.received", "tool.call", "tool.denied", "tool.replayed", "tool.error", "draft.created",
+                    "review.claimed", "review.decided", "request.failed", "agent.note"}
+
+
+def create_app(store: Store, demo: bool | None = None) -> FastAPI:
+    demo = os.getenv("PRIORAUTH_DEMO") == "1" if demo is None else demo
     app = FastAPI(title="Prior Authorization Agent Platform", version="1.0")
     app.state.store = store
 
@@ -76,6 +82,35 @@ def create_app(store: Store) -> FastAPI:
             REVIEW_OPEN.labels(tier).set(len(store.list_tasks("open", tier, limit=10000)))
         return Response(generate_latest(REGISTRY), media_type=CONTENT_TYPE_LATEST)
 
+    @app.get("/v1/me")
+    def me(authorization: str = Header(default="")):
+        try:
+            if not authorization.lower().startswith("bearer "):
+                raise AuthError("missing bearer token")
+            p = verify(authorization[7:], aud="priorauth-api")
+        except AuthError as e:
+            raise HTTPException(401, "unauthorized") from e
+        return {"subject": p.subject, "role": p.role, "scopes": sorted(p.scopes)}
+
+    @app.get("/v1/requests/{request_id}/timeline")
+    def timeline(request_id: str, p: Principal = Depends(principal("request:read"))):
+        """Sanitised audit view: who (agent role / human) did what, when. No arguments, no clinical content."""
+        if not store.get_request(request_id):
+            raise HTTPException(404)
+        rows = store.audit_entries(request_id, limit=500, ascending=True)
+        return [{"seq": r["seq"], "ts": r["ts"], "actor": r["actor"], "action": r["action"], "tool": r["detail"].get("tool"),
+                 "detail": {k: v for k, v in r["detail"].items() if k in ("recommendation", "confidence", "flags", "tier", "decision", "agreed_with_draft")}}
+                for r in rows if r["action"] in TIMELINE_ACTIONS]
+
+    if demo:
+        @app.get("/v1/demo/scenarios")
+        def demo_scenarios(p: Principal = Depends(principal("request:submit"))):
+            """Synthetic scenarios incl. ground truth, for the UI playground. Only mounted when PRIORAUTH_DEMO=1."""
+            from priorauth.synth.scenarios import load
+            return [{"scenario_id": s["scenario_id"], "profile": s["profile"], "paraphrased_evidence": s["paraphrased_evidence"],
+                     "request": {k: s["request"][k] for k in ("patient_ref", "service_code", "service_description", "diagnosis_codes", "urgency", "free_text")},
+                     "expected": s["expected"]} for s in load()]
+
     @app.post("/v1/requests", status_code=202)
     def submit(body: PARIn, response: Response, idempotency_key: str = Header(default=""),
                p: Principal = Depends(principal("request:submit"))):
@@ -104,6 +139,16 @@ def create_app(store: Store) -> FastAPI:
     def queue(tier: Optional[str] = None, state: str = Query("open", pattern="^(open|claimed|closed)$"),
               limit: int = Query(50, le=200), p: Principal = Depends(principal("review:read"))):
         return [t.model_dump(mode="json") for t in store.list_tasks(state, tier, limit)]
+
+    @app.get("/v1/reviews/{task_id}")
+    def get_review(task_id: str, p: Principal = Depends(principal("review:read"))):
+        t = store.get_task(task_id)
+        if not t:
+            raise HTTPException(404)
+        out = t.model_dump(mode="json")
+        d = store.get_decision(task_id)
+        out["decision"] = ({k: d[k] for k in ("reviewer", "decision", "comment", "agreed", "created_at")} if d else None)
+        return out
 
     @app.post("/v1/reviews/{task_id}/claim")
     def claim(task_id: str, p: Principal = Depends(principal("review:decide"))):

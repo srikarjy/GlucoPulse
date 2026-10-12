@@ -104,3 +104,66 @@ def test_audit_requires_role_and_chain_verifies_and_detects_tampering(client, bo
 def test_metrics_and_health(client):
     assert client.get("/healthz").json() == {"ok": True}
     assert "pa_requests_total" in client.get("/metrics").text
+
+
+def test_me_returns_role_and_scopes_and_rejects_bad_tokens(client):
+    r = client.get("/v1/me", headers=H("reviewer-rn", "alice")).json()
+    assert r["role"] == "reviewer-rn" and r["subject"] == "alice" and "review:decide" in r["scopes"]
+    assert client.get("/v1/me").status_code == 401
+    assert client.get("/v1/me", headers={"Authorization": f"Bearer {issue_token('drafting-agent')}"}).status_code == 401
+
+
+def test_timeline_shows_agents_in_order_without_clinical_content(client, box):
+    s = clean_meets()
+    rid = _flow(client, box, s)
+    t = client.get(f"/v1/requests/{rid}/timeline", headers=H("submitter")).json()
+    actors = [e["actor"] for e in t if e["action"] == "tool.call"]
+    assert actors[0] == "intake-agent" and actors[-1] == "escalation-agent"
+    assert [e["action"] for e in t][0] == "request.received" and "draft.created" in [e["action"] for e in t]
+    blob = str(t)
+    assert all(n["text"] not in blob for n in s["facts"]["notes"])
+    assert client.get("/v1/requests/NOPE/timeline", headers=H("submitter")).status_code == 404
+    assert client.get(f"/v1/requests/{rid}/timeline").status_code == 401
+
+
+def test_timeline_is_complete_on_a_busy_log(client, box):
+    """Regression: audit filtering used to happen after fetching only the latest 200 rows."""
+    rid = _flow(client, box, clean_meets())
+    for i in range(400):
+        box.store.audit("noise", "x", f"other-{i}")
+    t = client.get(f"/v1/requests/{rid}/timeline", headers=H("submitter")).json()
+    assert t[0]["action"] == "request.received" and any(e["action"] == "draft.created" for e in t)
+
+
+def test_playground_role_can_submit_and_read_drafts_but_never_decide(client, box):
+    h = H("playground", "demo", **{"Idempotency-Key": "pg1"})
+    s = clean_meets()
+    rid = client.post("/v1/requests", json=body(s), headers=h).json()["request_id"]
+    process_one(box.store, Orchestrator(box))
+    assert client.get(f"/v1/requests/{rid}", headers=H("playground")).json()["draft"]["status"] == "DRAFT"
+    tid = client.get("/v1/reviews", headers=H("playground")).json()[0]["task_id"]
+    assert client.post(f"/v1/reviews/{tid}/claim", headers=H("playground")).status_code == 403
+    assert client.post(f"/v1/reviews/{tid}/decision", json={"decision": "approved"}, headers=H("playground")).status_code == 403
+
+
+def test_demo_scenarios_endpoint_is_off_by_default_and_gated(box):
+    off = TestClient(create_app(box.store, demo=False))
+    assert off.get("/v1/demo/scenarios", headers=H("playground")).status_code == 404
+    on = TestClient(create_app(box.store, demo=True))
+    assert on.get("/v1/demo/scenarios").status_code == 401
+    assert on.get("/v1/demo/scenarios", headers=H("reviewer-rn")).status_code == 403
+    d = on.get("/v1/demo/scenarios", headers=H("playground")).json()
+    assert len(d) == 200 and {"expected", "request", "profile"} <= set(d[0])
+
+
+def test_get_single_review_includes_final_decision_once_made(client, box):
+    _flow(client, box, clean_meets())
+    tid = client.get("/v1/reviews", headers=H("reviewer-rn")).json()[0]["task_id"]
+    t = client.get(f"/v1/reviews/{tid}", headers=H("reviewer-rn")).json()
+    assert t["state"] == "open" and t["decision"] is None and t["draft"]["status"] == "DRAFT"
+    client.post(f"/v1/reviews/{tid}/claim", headers=H("reviewer-rn", "alice"))
+    client.post(f"/v1/reviews/{tid}/decision", json={"decision": "approved", "comment": "ok"}, headers=H("reviewer-rn", "alice"))
+    t = client.get(f"/v1/reviews/{tid}", headers=H("auditor")).json()
+    assert t["state"] == "closed" and t["decision"]["decision"] == "approved" and t["decision"]["reviewer"] == "alice"
+    assert client.get("/v1/reviews/NOPE", headers=H("reviewer-rn")).status_code == 404
+    assert client.get(f"/v1/reviews/{tid}", headers=H("submitter")).status_code == 403

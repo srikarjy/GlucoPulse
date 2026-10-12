@@ -31,6 +31,8 @@ API_ROLE_SCOPES: dict[str, set[str]] = {
     "reviewer-rn": {"review:read", "review:decide", "request:read"},
     "reviewer-md": {"review:read", "review:decide", "review:decide:denial", "request:read"},
     "auditor": {"audit:read", "request:read", "review:read"},
+    # DEMO/EVAL ONLY: can submit and read drafts and timelines, can never claim or decide. Powers the UI playground.
+    "playground": {"request:submit", "request:read", "review:read"},
 }
 ALL_ROLES = {**ROLE_SCOPES, **API_ROLE_SCOPES}
 
