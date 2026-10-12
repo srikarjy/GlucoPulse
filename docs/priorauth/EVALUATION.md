@@ -35,9 +35,12 @@ No error ever favours approval.
 * Paraphrased-evidence cases: **only 4 of 10 resolved** at first. Root cause (traced live, not a judgement error): the evidence stage correctly marked the
   criterion met and cited the note, but the *drafting* stage re-typed `criteria_summary` with empty `evidence`, and the grounding layer correctly rejected the unverifiable claim.
 * Fix: evidence findings are now recorded server-side (`submit_evidence_report`, 17th tool) and the draft tool verifies the recorded refs against the chart,
-  so no model has to copy another's evidence. Verified live on 1 of the 6 failing scenarios (S092); the other 5 were **not** re-run (budget). A prompt-only fix had resolved just 1 of 6.
-* Implication for fine-tuning: this failure was plumbing, not model judgement. The paraphrase gap is therefore **not yet evidence that a fine-tune is needed**.
-* Small sample, one model, one run: indicative, not a benchmark.
+  so no model has to copy another's evidence. A prompt-only fix had resolved just 1 of 6.
+* **Re-run of the 6 failing scenarios after the fix: 6/6 correct** (S092 alone, then S109/S111/S121/S128/S184 for about $0.25; no agent errors, safety gates 1.0).
+  Net: all 10 paraphrased scenarios now resolve to `supports_approval` (keyword baseline: 0/10). No single run covered all 10 end to end; the first run supplied 4, the re-runs the other 6.
+* **Implication for fine-tuning: not justified by this evidence.** The gap was plumbing, and a stock Haiku 4.5 behind the grounding layer closes it with no hallucinated approvals.
+* Small sample, one model, synthetic data, author-written paraphrases, 3 missing-documentation cases as the only hallucination probe: indicative, not a benchmark. The full 200-scenario LLM run (~$10 at Haiku rates) has not been done.
+* Cost: ~$0.05/scenario, ~33 s/scenario sequentially; total spend for all live runs ~$1.8 plus an unmetered run that was stopped early.
 
 ## How to read this (the limits)
 

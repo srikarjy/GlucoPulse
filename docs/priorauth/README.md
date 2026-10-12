@@ -22,7 +22,7 @@ API and tests all enforce that ([SAFETY.md](SAFETY.md)).
      Intake  →  Policy retrieval →  Evidence validation → Decision drafting → Escalation       (5 Strands agents,
         └────────────┴───────────────┴──── MCP (streamable HTTP, JWT per role) ────┴────────   least-privilege tokens)
                                        │
-                         16 tools: FHIR chart reads · policy RAG (pgvector | OpenSearch) · rule evaluation · draft · escalate · audit
+                         17 tools: FHIR chart reads · policy RAG (pgvector | OpenSearch) · rule evaluation · draft · escalate · audit
                                        │
                  Reviewer queue ◀── ReviewTask (tier + priority chosen server-side) ──▶ human decision (only writer of FinalDecision)
 ```
@@ -48,7 +48,7 @@ python -m priorauth.scripts.smoke                                  # end-to-end 
 | Area | Status | Evidence |
 |---|---|---|
 | 5 agents, 16 MCP tools, scopes, idempotency, audit chain | **Verified** | `tests/priorauth/` (unit + real MCP-over-HTTP with Strands' `MCPClient`) |
-| Strands agent loop → MCP → grounded draft → escalation | **Verified with a scripted model** | `test_strands_backend.py`. **Not run against live Bedrock.** |
+| Strands agent loop → MCP → grounded draft → escalation | **Verified with a scripted model, and live on Bedrock (small sample)** | `test_strands_backend.py`; Claude Haiku 4.5, 16-scenario focus sample + re-runs, ~$1.8 total. Not a full 200-scenario LLM run |
 | Postgres queue (`SKIP LOCKED`), audit chain under concurrency, pgvector HNSW | **Verified** on real Postgres 16 | `test_postgres.py`, with negative controls proving the tests can fail |
 | OpenSearch k-NN retrieval | **Verified** on real OpenSearch 2.17 | `test_opensearch.py` (ranking parity with in-memory) |
 | FHIR read integration | **Verified** against real HAPI 7.4.0 | `test_hapi.py`. Read-only; no SMART/OAuth handshake, no Epic/Cerner sandbox |
@@ -57,7 +57,7 @@ python -m priorauth.scripts.smoke                                  # end-to-end 
 | 200-scenario eval | **Verified** (deterministic backend) | [EVALUATION.md](EVALUATION.md); read its limits section |
 | Terraform (ECS/RDS/ALB/KMS…), K8s manifests (EKS) | **Statically validated only** | `terraform validate`, `kubeconform`; KEDA query tested on real Postgres. **Never applied to AWS.** |
 | GitHub Actions workflow | **Linted only** (`actionlint`) | has not run on GitHub; the `deploy` job is untested |
-| QLoRA training | **Not run** | needs a CUDA GPU. Dataset, leakage guard, baseline and dry-run are tested |
+| QLoRA training | **Not run, and currently not recommended** | needs a CUDA GPU. Dataset, leakage guard, baseline and dry-run are tested. See FINETUNING.md decision |
 | Langfuse | **Not run** | OTLP wiring documented; verified only against Jaeger |
 | Clinical validity / real payer policies / PHI handling | **Out of scope** | synthetic only |
 

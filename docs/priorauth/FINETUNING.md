@@ -6,6 +6,14 @@ Challenge it first. The rules already evaluate numeric/coded criteria exactly. T
 when the wording isn't a policy keyword. The keyword baseline scores **0 / 114** on that slice of the held-out set (and 1.00 elsewhere), so there is a measurable gap worth closing.
 A model that closes it by hallucinating documentation is *worse* than the baseline, so the gate that matters is `false_positive_met = 0`, not accuracy.
 
+## Decision (current): do not fine-tune
+
+The gap that motivated this (rules score 0/114 on paraphrased documentation) was measured on the keyword baseline. A live run of a **stock** Claude Haiku 4.5 through the pipeline
+resolved all 10 paraphrased eval scenarios with no hallucinated approvals once an evidence-handoff bug was fixed (see EVALUATION.md, "First live LLM run").
+Fine-tuning would add a GPU training cost, an adapter to host and re-validate, and drift risk, to fix a problem that no longer shows up.
+Revisit if: a larger or real-world eval shows a paraphrase/documentation gap the stock model cannot close, per-call cost or latency becomes the constraint (a tuned small model could help),
+or data cannot leave your boundary. The pipeline below is kept, tested, and ready for that case. It has never been trained.
+
 ## Pipeline
 
 | Step | Command | Status |
