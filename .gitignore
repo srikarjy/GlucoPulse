@@ -5,3 +5,8 @@ data/azt1d/
 __pycache__/
 *.pyc
 audit/
+.venv-pa/
+priorauth/finetune/data/
+priorauth.db
+*.tfstate*
+.terraform/

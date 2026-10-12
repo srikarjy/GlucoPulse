@@ -1,0 +1,60 @@
+# Prior-auth platform stack (synthetic data only).  docker compose -f docker-compose.priorauth.yml up --build
+# Runs on OrbStack. Ports are offset so it can coexist with the GlucoPulse stack.
+x-app: &app
+  build: { context: ., dockerfile: deploy/priorauth/Dockerfile }
+  environment: &env
+    PRIORAUTH_DATABASE_URL: postgresql+psycopg://postgres:${PA_PG_PASSWORD:-pa-dev-only}@pa-postgres:5432/priorauth
+    PRIORAUTH_PGVECTOR_URL: postgresql+psycopg://postgres:${PA_PG_PASSWORD:-pa-dev-only}@pa-postgres:5432/priorauth
+    PRIORAUTH_JWT_SECRET: ${PRIORAUTH_JWT_SECRET:?set PRIORAUTH_JWT_SECRET (>=32 chars), e.g. export PRIORAUTH_JWT_SECRET=$(openssl rand -hex 32)}
+    PRIORAUTH_BACKEND: ${PRIORAUTH_BACKEND:-deterministic}
+    PRIORAUTH_MCP_URL: http://pa-mcp:8765/mcp
+    OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-http://pa-jaeger:4318}
+    PRIORAUTH_ENV: dev
+  depends_on: { pa-postgres: { condition: service_healthy } }
+
+services:
+  pa-postgres:
+    image: pgvector/pgvector:pg16
+    environment: { POSTGRES_PASSWORD: "${PA_PG_PASSWORD:-pa-dev-only}", POSTGRES_DB: priorauth }
+    ports: ["55432:5432"]
+    volumes: [pa_pg:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U postgres -d priorauth"], interval: 5s, retries: 20 }
+
+  pa-api:
+    <<: *app
+    ports: ["8080:8080"]
+
+  pa-worker:
+    <<: *app
+    command: ["python", "-m", "priorauth.worker"]
+    ports: ["9102:9102"]
+    healthcheck: { disable: true }
+
+  pa-mcp:
+    <<: *app
+    command: ["python", "-m", "priorauth.mcp_server.server"]
+    ports: ["8765:8765"]
+    healthcheck: { disable: true }
+
+  pa-jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    environment: { COLLECTOR_OTLP_ENABLED: "true" }
+    ports: ["16687:16686", "4318:4318"]
+
+  pa-prometheus:
+    image: prom/prometheus:v2.55.1
+    volumes:
+      - ./monitoring/priorauth/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/priorauth/alerts.yml:/etc/prometheus/alerts.yml:ro
+    ports: ["9091:9090"]
+
+  pa-grafana:
+    image: grafana/grafana:11.3.0
+    environment: { GF_SECURITY_ADMIN_PASSWORD: "${PA_GRAFANA_PASSWORD:-admin-dev-only}", GF_USERS_ALLOW_SIGN_UP: "false" }
+    volumes:
+      - ./monitoring/priorauth/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/priorauth/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["3001:3000"]
+    depends_on: [pa-prometheus]
+
+volumes: { pa_pg: {} }

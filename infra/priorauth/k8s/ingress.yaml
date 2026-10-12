@@ -1,0 +1,19 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: pa-api
+  annotations:
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+    alb.ingress.kubernetes.io/listen-ports: '[{"HTTPS":443}]'
+    alb.ingress.kubernetes.io/ssl-policy: ELBSecurityPolicy-TLS13-1-2-2021-06
+    alb.ingress.kubernetes.io/certificate-arn: arn:aws:acm:us-east-1:ACCOUNT_ID:certificate/REPLACE
+    alb.ingress.kubernetes.io/inbound-cidrs: 10.0.0.0/8        # REPLACE with approved EHR/reviewer CIDRs
+    alb.ingress.kubernetes.io/healthcheck-path: /readyz
+spec:
+  ingressClassName: alb
+  rules:
+    - http:
+        paths:
+          - { path: /v1, pathType: Prefix, backend: { service: { name: pa-api, port: { number: 8080 } } } }
+          - { path: /healthz, pathType: Exact, backend: { service: { name: pa-api, port: { number: 8080 } } } }

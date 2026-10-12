@@ -1,0 +1,29 @@
+# QLoRA SFT config. Base model is Apache-2.0 (no gated-license click-through); swap freely.
+base_model: Qwen/Qwen2.5-7B-Instruct
+output_dir: artifacts/priorauth-doc-judge-qlora
+data_dir: priorauth/finetune/data
+max_seq_len: 1024
+seed: 1337
+quant:                       # QLoRA: 4-bit NF4 base weights + double quantisation, bf16 compute
+  load_in_4bit: true
+  bnb_4bit_quant_type: nf4
+  bnb_4bit_use_double_quant: true
+  bnb_4bit_compute_dtype: bfloat16
+lora:
+  r: 16
+  alpha: 32
+  dropout: 0.05
+  target_modules: all-linear
+train:
+  epochs: 2
+  per_device_batch_size: 4
+  grad_accum: 4              # effective batch 16
+  learning_rate: 2.0e-4
+  lr_scheduler: cosine
+  warmup_ratio: 0.03
+  weight_decay: 0.0
+  gradient_checkpointing: true
+  bf16: true
+  logging_steps: 10
+  eval_steps: 50
+  save_steps: 100
