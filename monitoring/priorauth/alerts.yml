@@ -1,0 +1,37 @@
+groups:
+  - name: priorauth
+    rules:
+      - alert: PADeadLetterJobs
+        expr: pa_queue_jobs{state="dead"} > 0
+        for: 1m
+        labels: { severity: page }
+        annotations: { summary: "Requests exhausted retries and were dead-lettered; they have NO review task. Replay or triage manually." }
+      - alert: PAPipelineFailingClosed
+        expr: sum(rate(pa_pipeline_failures_total[10m])) > 0.05
+        for: 5m
+        labels: { severity: page }
+        annotations: { summary: "Agents are failing and every affected request is being forced to physician review (model outage? tool error?)." }
+      - alert: PAPhysicianBacklog
+        expr: pa_review_tasks_open{tier="physician"} > 50
+        for: 30m
+        labels: { severity: warn }
+        annotations: { summary: "Physician review backlog; expedited requests may breach turnaround." }
+      - alert: PAQueueStuck
+        expr: pa_queue_jobs{state="queued"} > 0 and sum(rate(pa_drafts_total[10m])) == 0
+        for: 10m
+        labels: { severity: page }
+        annotations: { summary: "Jobs are queued but no drafts are being produced: workers down or wedged." }
+      - alert: PAReviewerOverrideRateHigh
+        expr: sum(increase(pa_review_overrides_total[1d])) / clamp_min(sum(increase(pa_drafts_total[1d])), 1) > 0.30
+        for: 1h
+        labels: { severity: warn }
+        annotations: { summary: "Humans disagree with >30% of drafts: possible model/policy drift. Re-run the 200-scenario eval." }
+      - alert: PAToolAuthDenials
+        expr: sum(rate(pa_tool_calls_total{outcome="denied"}[5m])) > 0
+        for: 5m
+        labels: { severity: warn }
+        annotations: { summary: "MCP tool calls are being denied by scope checks: misconfigured agent role or probing." }
+      - alert: PAPromptInjectionSpike
+        expr: sum(increase(pa_flags_total{flag="prompt_injection"}[1h])) > 5
+        labels: { severity: warn }
+        annotations: { summary: "Several requests carried instruction-like content in chart text or provider letters." }

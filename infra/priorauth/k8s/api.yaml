@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: pa-api, labels: { app: pa-api } }
+spec:
+  replicas: 2
+  strategy: { type: RollingUpdate, rollingUpdate: { maxUnavailable: 0, maxSurge: 1 } }
+  selector: { matchLabels: { app: pa-api } }
+  template:
+    metadata:
+      labels: { app: pa-api }
+      annotations: { prometheus.io/scrape: "true", prometheus.io/port: "8080", prometheus.io/path: /metrics }
+    spec:
+      serviceAccountName: pa-api
+      terminationGracePeriodSeconds: 120      # worker drains in-flight pipelines on SIGTERM
+      securityContext: { runAsNonRoot: true, runAsUser: 10001, seccompProfile: { type: RuntimeDefault } }
+      topologySpreadConstraints:
+        - { maxSkew: 1, topologyKey: topology.kubernetes.io/zone, whenUnsatisfiable: ScheduleAnyway, labelSelector: { matchLabels: { app: pa-api } } }
+      containers:
+        - name: api
+          image: priorauth
+          command: ["uvicorn","--factory","priorauth.api:app_factory","--host","0.0.0.0","--port","8080"]
+          ports: [{ containerPort: 8080 }]
+          envFrom: [{ configMapRef: { name: pa-config } }, { secretRef: { name: pa-secrets } }]
+          env: [{ name: PORT, value: "8080" }]
+          resources: { requests: { cpu: 250m, memory: 512Mi }, limits: { memory: 512Mi } }
+          securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+          readinessProbe: { httpGet: { path: /readyz, port: 8080 }, periodSeconds: 5 }
+          livenessProbe: { httpGet: { path: /healthz, port: 8080 }, periodSeconds: 10, failureThreshold: 3 }
+---
+apiVersion: v1
+kind: Service
+metadata: { name: pa-api }
+spec:
+  selector: { app: pa-api }
+  ports: [{ port: 8080, targetPort: 8080 }]
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: { name: pa-api }
+spec:
+  minAvailable: 1
+  selector: { matchLabels: { app: pa-api } }

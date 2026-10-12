@@ -1,0 +1,9 @@
+# GPU training environment ONLY (CUDA Linux). Not installed in CI or the service image.
+torch>=2.4
+transformers>=4.46
+peft>=0.13
+trl>=0.12
+bitsandbytes>=0.44
+accelerate>=1.0
+datasets>=3.0
+pyyaml
