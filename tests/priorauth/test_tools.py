@@ -133,3 +133,29 @@ def test_model_may_upgrade_paraphrased_documentation_only_with_a_real_note(box, 
                    confidence=0.9, rationale="", criteria_summary=[{"criterion_id": doc, "met": True, "evidence": [f"DocumentReference/{pid}-n0"]}],
                    flags=[], missing_information=[], idempotency_key="p2")
     assert real["recommendation"] == "supports_approval"
+
+
+def test_recorded_evidence_survives_a_drafting_model_that_drops_it(box, submit):
+    """Regression from the live Haiku run: evidence stage cited the note, drafting stage re-typed criteria_summary with empty evidence."""
+    s = next(x for x in __import__("tests.priorauth.conftest", fromlist=["x"])._SC if x["paraphrased_evidence"] and x["profile"] == "meets")
+    rid = submit(s); pid = s["request"]["patient_ref"]; pol = s["expected"]["policy_id"]
+    from priorauth.synth.policies import BY_ID
+    doc = [c.id for c in BY_ID[pol].criteria if c.kind == "documentation"][0]
+    ev = gateway_for(box, "evidence-agent"); dr = gateway_for(box, "drafting-agent")
+    ev.call("submit_evidence_report", request_id=rid, results=[{"criterion_id": doc, "met": True, "evidence": [f"DocumentReference/{pid}-n0"]}], idempotency_key="e1")
+    dropped = [{"criterion_id": doc, "met": True, "evidence": []}]            # what the drafting model actually sent
+    out = dr.call("create_draft_determination", request_id=rid, policy_id=pol, recommendation="supports_approval", confidence=0.9,
+                  rationale="", criteria_summary=dropped, flags=[], missing_information=[], idempotency_key="d1")
+    assert out["recommendation"] == "supports_approval" and "evidence_discrepancy" not in out["flags"]
+
+
+def test_recorded_evidence_with_a_fabricated_reference_is_still_rejected(box, submit):
+    s = next(x for x in __import__("tests.priorauth.conftest", fromlist=["x"])._SC if x["paraphrased_evidence"] and x["profile"] == "meets")
+    rid = submit(s); pol = s["expected"]["policy_id"]
+    from priorauth.synth.policies import BY_ID
+    doc = [c.id for c in BY_ID[pol].criteria if c.kind == "documentation"][0]
+    gateway_for(box, "evidence-agent").call("submit_evidence_report", request_id=rid,
+        results=[{"criterion_id": doc, "met": True, "evidence": ["DocumentReference/made-up"]}], idempotency_key="e2")
+    out = gateway_for(box, "drafting-agent").call("create_draft_determination", request_id=rid, policy_id=pol, recommendation="supports_approval",
+        confidence=0.9, rationale="", criteria_summary=[{"criterion_id": doc, "met": True, "evidence": []}], flags=[], missing_information=[], idempotency_key="d2")
+    assert out["recommendation"] == "insufficient_info" and "evidence_discrepancy" in out["flags"]

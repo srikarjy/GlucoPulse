@@ -41,7 +41,9 @@ PROMPTS = {
     "policy_retrieval": COMMON + " Task: call get_request then search_policies (pass the service_code). Reply with ONLY JSON: "
                         "{\"policy_id\": str|null, \"reason\": str}. Use null if no policy genuinely applies.",
     "evidence_validation": COMMON + " Task: call get_policy_criteria and evaluate_criteria; use get_clinical_notes only for "
-                           "documentation criteria the rules could not determine. Reply with ONLY JSON: "
+                           "documentation criteria the rules could not determine. For every criterion you mark met, `evidence` MUST list the exact "
+                           "reference ids returned by the tools (for notes: the note_id, e.g. DocumentReference/...); a met claim with empty "
+                           "evidence will be rejected. Then call submit_evidence_report once with the same results (idempotency_key as given). Reply with ONLY JSON: "
                            "{\"results\": [{\"criterion_id\": str, \"met\": true|false|null, \"evidence\": [ref], \"note\": str}], \"flags\": [str]}.",
     "decision_drafting": COMMON + " Task: call create_draft_determination ONCE with recommendation in "
                          "{supports_approval, does_not_support, insufficient_info} (there is NO approve/deny), a concise "
@@ -51,6 +53,17 @@ PROMPTS = {
 }
 ROLE_OF = {"intake": "intake-agent", "policy_retrieval": "policy-agent", "evidence_validation": "evidence-agent",
            "decision_drafting": "drafting-agent", "escalation": "escalation-agent"}
+class Usage:
+    """Process-wide token counter so evals can enforce a spend cap."""
+    input_tokens = 0
+    output_tokens = 0
+    calls = 0
+
+    @classmethod
+    def cost(cls, usd_per_m_in: float, usd_per_m_out: float) -> float:
+        return cls.input_tokens / 1e6 * usd_per_m_in + cls.output_tokens / 1e6 * usd_per_m_out
+
+
 _JSON = re.compile(r"\{.*\}", re.S)
 
 
@@ -85,7 +98,10 @@ class StrandsStage:
         with self._client() as c:
             tools = [t for t in c.list_tools_sync() if t.tool_name in allowed]
             agent = StrandsAgent(model=self.model_factory(), system_prompt=PROMPTS[self.name], tools=tools, callback_handler=None)
-            return str(agent(prompt))
+            result = agent(prompt)
+            u = getattr(getattr(result, "metrics", None), "accumulated_usage", None) or {}
+            Usage.input_tokens += u.get("inputTokens", 0); Usage.output_tokens += u.get("outputTokens", 0); Usage.calls += 1
+            return str(result)
 
     def run(self, s: PipelineState) -> PipelineState:
         import time
@@ -103,7 +119,7 @@ class StrandsStage:
                 if not pid:
                     s.flags.append("no_policy")
             elif self.name == "evidence_validation":
-                ev = _parse(self._ask(f"Request id: {rid}. Policy: {s.policy_id}"))
+                ev = _parse(self._ask(f"Request id: {rid}. Policy: {s.policy_id}. idempotency_key={key('evidence')}"))
                 s.evidence_json = ev
                 s.flags += [f for f in ev.get("flags", []) if f not in s.flags]
             elif self.name == "decision_drafting":

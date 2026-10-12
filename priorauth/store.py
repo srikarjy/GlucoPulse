@@ -32,6 +32,8 @@ drafts_t = sa.Table("par_drafts", md,
     sa.Column("request_id", sa.String, primary_key=True), sa.Column("payload", sa.JSON), sa.Column("created_at", sa.String))
 staged_t = sa.Table("staged_drafts", md,
     sa.Column("request_id", sa.String, primary_key=True), sa.Column("payload", sa.JSON), sa.Column("created_at", sa.String))
+evidence_t = sa.Table("evidence_reports", md,
+    sa.Column("request_id", sa.String, primary_key=True), sa.Column("payload", sa.JSON), sa.Column("created_at", sa.String))
 tasks_t = sa.Table("review_tasks", md,
     sa.Column("task_id", sa.String, primary_key=True), sa.Column("request_id", sa.String, unique=True),
     sa.Column("tier", sa.String), sa.Column("priority", sa.Integer), sa.Column("state", sa.String, index=True),
@@ -192,6 +194,17 @@ class Store:
             c.execute(staged_t.delete().where(staged_t.c.request_id == draft.request_id))
             c.execute(staged_t.insert().values(request_id=draft.request_id,
                                                payload=json.loads(draft.model_dump_json()), created_at=iso(now())))
+
+    def save_evidence(self, request_id: str, results: list[dict]) -> None:
+        """Evidence-stage findings recorded server-side, so the drafting stage never has to re-type evidence."""
+        with self._lock, self.engine.begin() as c:
+            c.execute(evidence_t.delete().where(evidence_t.c.request_id == request_id))
+            c.execute(evidence_t.insert().values(request_id=request_id, payload=results, created_at=iso(now())))
+
+    def get_evidence(self, request_id: str) -> list[dict]:
+        with self._read() as c:
+            r = c.execute(sa.select(evidence_t.c.payload).where(evidence_t.c.request_id == request_id)).first()
+        return r[0] if r else []
 
     def get_staged(self, request_id: str) -> Optional[DraftRecommendation]:
         with self._read() as c:

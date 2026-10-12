@@ -195,6 +195,14 @@ class ToolBox:
         return {"documented_days": best, "satisfied": best >= min_days, "has_record": bool(ms)}
 
     # ----- mutating tools -----
+    @tool("evidence:write", mutating=True)
+    def submit_evidence_report(self, request_id: str, results: list[dict], idempotency_key: str) -> dict:
+        """Record per-criterion findings (criterion_id, met, evidence refs). Treated as a CLAIM: the draft tool re-verifies every cited reference against the chart."""
+        self._request(request_id)
+        clean = [CriterionResult.model_validate(r).model_dump(mode="json") for r in results]
+        self.store.save_evidence(request_id, clean)
+        return {"recorded": len(clean)}
+
     @tool("draft:write", mutating=True)
     def create_draft_determination(self, request_id: str, policy_id: str, recommendation: str, confidence: float,
                                    rationale: str, criteria_summary: list[dict], flags: list[str],
@@ -226,6 +234,10 @@ class ToolBox:
         real_notes = {n.note_id for n in chart.notes} - quarantined
         kinds = {c.id: c.kind for c in pol.criteria}
         said = {c.criterion_id: c for c in claimed}
+        # The evidence stage's recorded findings fill in what the drafting model omitted; nothing is trusted without the checks below.
+        for r in map(CriterionResult.model_validate, self.store.get_evidence(req.request_id)):
+            if r.criterion_id not in said or (said[r.criterion_id].met is True and not said[r.criterion_id].evidence):
+                said[r.criterion_id] = r
         merged = []
         for d in det:
             m = said.get(d.criterion_id)

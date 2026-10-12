@@ -20,7 +20,7 @@ ALG = "HS256"
 ROLE_SCOPES: dict[str, set[str]] = {
     "intake-agent": {"request:read", "validate:read"},
     "policy-agent": {"policy:read", "request:read"},
-    "evidence-agent": {"chart:read", "policy:read", "validate:read", "request:read"},
+    "evidence-agent": {"chart:read", "policy:read", "validate:read", "request:read", "evidence:write"},
     "drafting-agent": {"policy:read", "draft:write", "request:read"},
     "escalation-agent": {"escalate:write", "audit:write", "request:read"},
 }

@@ -46,7 +46,8 @@ def ece(confs: list[float], correct: list[bool], bins: int = 10) -> float:
     return tot
 
 
-def run(scenarios: list[dict] | None = None, orchestrator_factory=None) -> dict:
+def run(scenarios: list[dict] | None = None, orchestrator_factory=None, budget=None) -> dict:
+    """budget: optional callable returning True when spend is exhausted; the run stops early and reports `stopped_early`."""
     scenarios = scenarios or load()
     src = InMemoryFhirSource()
     for s in scenarios:
@@ -63,7 +64,11 @@ def run(scenarios: list[dict] | None = None, orchestrator_factory=None) -> dict:
     sem1 = sem3 = sem_n = code1 = code_n = 0
     by_profile = defaultdict(lambda: [0, 0])
 
+    stopped_early = False
     for s in scenarios:
+        if budget and budget():
+            stopped_early = True
+            break
         req = PARRequest.model_validate(s["request"])
         store.create_request(req)
         st = orch.run(req.request_id)
@@ -98,7 +103,7 @@ def run(scenarios: list[dict] | None = None, orchestrator_factory=None) -> dict:
         rows.append({"id": s["scenario_id"], "profile": s["profile"], "expected": exp["recommendation"], "got": got,
                      "conf": d.confidence, "tier": task.tier.value, "flags": d.flags, "ok": ok})
 
-    n = len(scenarios)
+    n = len(rows)
     per_class = {}
     for l in LABELS:
         tp = cm[l][l]; fn = sum(cm[l].values()) - tp; fp = sum(cm[o][l] for o in LABELS if o != l)
@@ -122,6 +127,7 @@ def run(scenarios: list[dict] | None = None, orchestrator_factory=None) -> dict:
                        "mean_when_right": round(sum(right) / len(right), 3) if right else None,
                        "mean_when_wrong": round(sum(wrong) / len(wrong), 3) if wrong else None},
         "audit_chain_intact": store.verify_audit_chain()[0],
+        "stopped_early": stopped_early,
         "agent_errors": dict(errors_seen),          # non-empty = some scenarios failed closed; read this before trusting accuracy
         "errors": [r for r in rows if not r["ok"]],
     }
@@ -134,6 +140,12 @@ def main() -> int:  # pragma: no cover
     ap.add_argument("--backend", choices=["deterministic", "bedrock"], default="deterministic",
                     help="bedrock = Strands agents over MCP using AWS credentials (costs money; try --limit 10 first)")
     ap.add_argument("--limit", type=int, help="evaluate only the first N scenarios")
+    ap.add_argument("--max-usd", type=float, default=1.0, help="hard spend cap for --backend bedrock (estimate from token counts)")
+    ap.add_argument("--price-in", type=float, default=1.0, help="USD per 1M input tokens (default = Haiku 4.5 list price; verify)")
+    ap.add_argument("--price-out", type=float, default=5.0, help="USD per 1M output tokens")
+    ap.add_argument("--ids", help="comma list of scenario ids to run, e.g. S092,S109")
+    ap.add_argument("--focus-others", type=int, default=3, help="with --focus: how many scenarios of each non-paraphrased profile")
+    ap.add_argument("--focus-profiles", help="with --focus: comma list restricting which other profiles are included, e.g. missing,injection")
     ap.add_argument("--focus", action="store_true",
                     help="cheap targeted sample: every paraphrased scenario + 3 of each other profile (use with --backend bedrock)")
     a = ap.parse_args()
@@ -145,11 +157,22 @@ def main() -> int:  # pragma: no cover
     if a.focus:
         seen: Counter = Counter()
         pick = []
+        only = set(a.focus_profiles.split(",")) if a.focus_profiles else None
         for x in sc:
-            if x["paraphrased_evidence"] or seen[x["profile"]] < 3:
+            if x["paraphrased_evidence"] or (seen[x["profile"]] < a.focus_others and (only is None or x["profile"] in only)):
                 pick.append(x); seen[x["profile"]] += 0 if x["paraphrased_evidence"] else 1
         sc = pick
-    r = run(sc[: a.limit] if a.limit else sc if a.focus else None, orchestrator_factory=factory)
+    if a.ids:
+        want = set(a.ids.split(","))
+        sc, a.focus = [x for x in sc if x["scenario_id"] in want], True
+    budget = None
+    if a.backend == "bedrock":
+        from priorauth.agents.strands_backend import Usage
+        budget = lambda: Usage.cost(a.price_in, a.price_out) >= a.max_usd
+    r = run(sc[: a.limit] if a.limit else sc if a.focus else None, orchestrator_factory=factory, budget=budget)
+    if a.backend == "bedrock":
+        print(f"tokens in={Usage.input_tokens} out={Usage.output_tokens} calls={Usage.calls} est_cost=${Usage.cost(a.price_in, a.price_out):.3f} "
+              f"(cap ${a.max_usd}); scenarios scored={r['n']} stopped_early={r['stopped_early']}", file=sys.stderr)
     summary = {k: v for k, v in r.items() if k != "errors"}
     if r["agent_errors"]:
         print("WARNING: scenarios failed closed -> results below are NOT a measure of the model:", json.dumps(r["agent_errors"], indent=1), file=sys.stderr)

@@ -27,6 +27,18 @@ clean (55), contradicted criterion (35), missing evidence (30), code mismatch (1
 **All 10 errors are the paraphrased-evidence scenarios, and every one fails safe** (`supports_approval → insufficient_info`: the human sees "documentation not found" rather than a wrong approval).
 No error ever favours approval.
 
+## First live LLM run (Claude Haiku 4.5 on Bedrock, 16-scenario focus sample)
+
+`run_eval --backend bedrock --focus --focus-profiles missing,injection` (cost about $0.74, about 33 s/scenario, about $0.05/scenario):
+
+* Safety gates all 1.0. **No hallucinated documentation**: 3/3 missing-documentation and 3/3 injection scenarios correct.
+* Paraphrased-evidence cases: **only 4 of 10 resolved** at first. Root cause (traced live, not a judgement error): the evidence stage correctly marked the
+  criterion met and cited the note, but the *drafting* stage re-typed `criteria_summary` with empty `evidence`, and the grounding layer correctly rejected the unverifiable claim.
+* Fix: evidence findings are now recorded server-side (`submit_evidence_report`, 17th tool) and the draft tool verifies the recorded refs against the chart,
+  so no model has to copy another's evidence. Verified live on 1 of the 6 failing scenarios (S092); the other 5 were **not** re-run (budget). A prompt-only fix had resolved just 1 of 6.
+* Implication for fine-tuning: this failure was plumbing, not model judgement. The paraphrase gap is therefore **not yet evidence that a fine-tune is needed**.
+* Small sample, one model, one run: indicative, not a benchmark.
+
 ## How to read this (the limits)
 
 * **Largely self-referential.** The generator and the rules were written by the same author from one spec, so high scores on structured criteria prove the code matches the spec, not that the spec is clinically right.
