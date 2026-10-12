@@ -55,6 +55,7 @@ def run(scenarios: list[dict] | None = None, orchestrator_factory=None) -> dict:
     box = ToolBox(store, src, retr)
     orch = (orchestrator_factory or Orchestrator)(box)
 
+    errors_seen: Counter = Counter()
     rows, confs, correct = [], [], []
     cm = defaultdict(Counter)
     flag_tp = flag_fp = flag_fn = 0
@@ -66,6 +67,8 @@ def run(scenarios: list[dict] | None = None, orchestrator_factory=None) -> dict:
         req = PARRequest.model_validate(s["request"])
         store.create_request(req)
         st = orch.run(req.request_id)
+        if getattr(orch, "last_error", None):
+            errors_seen[orch.last_error] += 1
         d = store.get_draft(req.request_id)
         task = store.get_task(f"TASK-{req.request_id}")
         exp = s["expected"]
@@ -119,6 +122,7 @@ def run(scenarios: list[dict] | None = None, orchestrator_factory=None) -> dict:
                        "mean_when_right": round(sum(right) / len(right), 3) if right else None,
                        "mean_when_wrong": round(sum(wrong) / len(wrong), 3) if wrong else None},
         "audit_chain_intact": store.verify_audit_chain()[0],
+        "agent_errors": dict(errors_seen),          # non-empty = some scenarios failed closed; read this before trusting accuracy
         "errors": [r for r in rows if not r["ok"]],
     }
     return res
@@ -130,13 +134,25 @@ def main() -> int:  # pragma: no cover
     ap.add_argument("--backend", choices=["deterministic", "bedrock"], default="deterministic",
                     help="bedrock = Strands agents over MCP using AWS credentials (costs money; try --limit 10 first)")
     ap.add_argument("--limit", type=int, help="evaluate only the first N scenarios")
+    ap.add_argument("--focus", action="store_true",
+                    help="cheap targeted sample: every paraphrased scenario + 3 of each other profile (use with --backend bedrock)")
     a = ap.parse_args()
     factory = None
     if a.backend == "bedrock":
         from priorauth.eval.llm_backend import make_factory
         factory = make_factory()
-    r = run(load()[: a.limit] if a.limit else None, orchestrator_factory=factory)
+    sc = load()
+    if a.focus:
+        seen: Counter = Counter()
+        pick = []
+        for x in sc:
+            if x["paraphrased_evidence"] or seen[x["profile"]] < 3:
+                pick.append(x); seen[x["profile"]] += 0 if x["paraphrased_evidence"] else 1
+        sc = pick
+    r = run(sc[: a.limit] if a.limit else sc if a.focus else None, orchestrator_factory=factory)
     summary = {k: v for k, v in r.items() if k != "errors"}
+    if r["agent_errors"]:
+        print("WARNING: scenarios failed closed -> results below are NOT a measure of the model:", json.dumps(r["agent_errors"], indent=1), file=sys.stderr)
     print(json.dumps(summary, indent=2))
     print(f"misclassified: {len(r['errors'])}")
     if a.out:

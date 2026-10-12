@@ -21,6 +21,7 @@ log = logging.getLogger("priorauth.pipeline")
 class Orchestrator:
     def __init__(self, box: ToolBox, agents: list | None = None):
         self.box = box
+        self.last_error = None
         self.agents = agents or [IntakeAgent(box), PolicyRetrievalAgent(box), EvidenceValidationAgent(box),
                                  DecisionDraftingAgent(box), EscalationAgent(box)]
 
@@ -33,6 +34,7 @@ class Orchestrator:
                     state = a.run(state)
                 except Exception as e:   # noqa: BLE001 - deliberate catch-all, fail closed
                     log.exception("agent %s failed for %s", a.name, request_id)
+                    self.last_error = f"{a.name}: {type(e).__name__}: {str(e)[:300]}"
                     PIPELINE_FAIL.labels(a.name).inc()
                     return self._fail_closed(state, a.name, e)
         d = state.staged
