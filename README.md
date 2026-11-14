@@ -83,21 +83,82 @@ Real data-quality problems handled in the pipeline: duplicate timestamps, confli
 
 ---
 
+## Tech Stack & Dependencies
+
+Each service pins its own dependencies in its own `requirements.txt`. Docker Compose installs them inside each service's container, so you don't need a single global install.
+
+### Prerequisites
+
+| Tool | Version | Used for |
+|---|---|---|
+| Docker + Docker Compose | 24+ (Docker Desktop, OrbStack, or Colima) | Running the full pipeline |
+| Python | 3.12 (3.11 inside the Airflow image) | Local dev, tests, model training |
+| Node.js | 22 | `priorauth-ui/` only |
+| AZT1D dataset | [Mendeley DOI 10.17632/gk9m674wcx.1](https://data.mendeley.com/datasets/gk9m674wcx/1) | Training and replay data |
+
+### Infrastructure (`docker-compose.yml`)
+
+| Service | Image | Role |
+|---|---|---|
+| Kafka | `apache/kafka:3.7.0` (KRaft, no ZooKeeper) | `cgm-raw` stream + `cgm-dlq` dead-letter topic |
+| TimescaleDB | `timescale/timescaledb:2.16.1-pg16` | Time-series storage (host port **5544**) |
+| Airflow | `apache/airflow:2.9.3-python3.11` | Weekly PySpark feature job |
+| Grafana | `grafana/grafana:11.2.0` | Ingestion health + model RMSE dashboards |
+| HAPI FHIR | `hapiproject/hapi:v7.4.0` | Local EHR for the FHIR round-trip test |
+| Caddy | `caddy:2.8.4` | TLS termination in front of the serving API |
+
+### Python packages by component
+
+| Component | Manifest | Key packages (pinned) |
+|---|---|---|
+| Producer | `producer/requirements.txt` | `confluent-kafka 2.15.0` |
+| Consumer | `consumer/requirements.txt` | `confluent-kafka 2.15.0`, `psycopg2-binary 2.9.10` |
+| Batch features | `airflow/requirements.txt` | `pyspark 3.5.1`, `psycopg2-binary 2.9.10` |
+| Model training | `model/requirements.txt` | `torch 2.4.1`, `pytorch-lightning 2.4.0`, `pytorch-forecasting 1.1.1`, `scikit-learn 1.5.2`, `pandas 2.2.3`, `numpy 1.26.4`, `onnx 1.17.0`, `onnxruntime 1.19.2` |
+| Serving + FHIR | `serving/requirements.txt` | `fastapi 0.115.4`, `uvicorn 0.32.0`, `onnxruntime 1.19.2`, `torch 2.4.1`, `pytorch-forecasting 1.1.1`, `pyjwt[crypto] 2.9.0`, `psycopg2-binary 2.9.9` |
+| Clinical agent | `agents/requirements.txt` + `priorauth/requirements.txt` | `strands-agents 1.59.0`, `mcp ≥1.23`, `anthropic`, `openai` (only for the optional live demo) |
+| Prior-auth platform | `priorauth/requirements.txt` | `fastapi 0.143.0`, `sqlalchemy 2.1.4`, `psycopg 3.3.6`, `pgvector 0.5.1`, `pydantic 2.14.1`, `httpx 0.28.1`, `opentelemetry-sdk 1.45.1`, `prometheus-client 0.26.0`, `boto3`, `opensearch-py` |
+| Prior-auth fine-tuning | `priorauth/finetune/requirements-train.txt` | `transformers`, `peft`, `trl`, `bitsandbytes`, `accelerate`, `datasets` (GPU, optional) |
+| Hosted demos | `hf_space/requirements.txt`, `hf_space_agent/requirements.txt` | Smaller serving-only sets |
+| Dev / test | `priorauth/requirements-dev.txt` | `pytest ≥8`, `ruff ≥0.6`, plus `httpx` and `fhir.resources 8.3.0` (validates FHIR output in `tests/healthcare`) |
+
+### Frontend (`priorauth-ui/package.json`)
+
+`next ^16.4.6`, `react 19.3.0`, `tailwindcss 4`, `typescript 5`, plus `@playwright/test` and `@axe-core/playwright` for end-to-end and accessibility tests.
+
+---
+
 ## Quickstart
+
+**1. Run the full pipeline (Docker)**
 
 ```bash
 git clone https://github.com/srikarjy/GlucoPulse.git && cd GlucoPulse
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-docker compose up -d          # Kafka, TimescaleDB (host port 5544), Airflow, Grafana
+cp .env.example .env                     # set credentials
+# put the AZT1D CSVs in data/azt1d/ (the folder is gitignored)
+docker compose up -d                     # Kafka, TimescaleDB, Airflow, Grafana, producer, consumer, serving
 ```
 
-Put the AZT1D CSVs in `data/azt1d/` (the folder is gitignored).
+**2. Local dev + healthcare tests**
 
 ```bash
-.venv/bin/pytest tests/healthcare -q                     # FHIR / auth / audit
-.venv-pa/bin/python -m pytest tests/agents -q            # clinical agent (needs strands + mcp)
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -r serving/requirements.txt pytest httpx "fhir.resources==8.3.0"
+pytest tests/healthcare -q               # FHIR facade, SMART auth, audit log (50 tests)
+```
+
+**3. Clinical agent tests** (separate venv, because it needs a newer FastAPI and pydantic stack)
+
+```bash
+python3.12 -m venv .venv-pa
+.venv-pa/bin/pip install -r priorauth/requirements.txt -r priorauth/requirements-dev.txt
+.venv-pa/bin/python -m pytest tests/agents -q
+```
+
+**4. Prior-auth UI**
+
+```bash
+cd priorauth-ui && npm ci && npm run dev
 ```
 
 ---
