@@ -1,250 +1,192 @@
 # GlucoPulse
 
-Real-time streaming pipeline for continuous glucose monitor (CGM) data. Built to answer one question a production data engineer faces daily: **how do you move sensor data reliably from source to storage to model, and know when something breaks before your users do?**
+**Streaming CGM pipeline → glucose forecasting → FHIR-native clinical decision support.**
 
-**Live demo:** [srikarjy025-glucopulse.hf.space](https://srikarjy025-glucopulse.hf.space) (also deployed on Vercel: [glucopulse-inference.vercel.app](https://glucopulse-inference.vercel.app)) — a standalone FastAPI endpoint serving the trained forecasting model (`POST /predict`, `GET /docs` for the interactive Swagger UI). This is the serving layer only, not the full streaming pipeline — see [What This Project Is](#what-this-project-is) below for why that distinction matters.
+GlucoPulse moves continuous glucose monitor data from sensor to forecast reliably, serves the forecasts through a standards-based healthcare API, and puts a citation-grounded AI agent with a human reviewer on top of it.
 
----
+**Live demo:** [srikarjy025-glucopulse.hf.space](https://srikarjy025-glucopulse.hf.space) · [Vercel mirror](https://glucopulse-inference.vercel.app). This is the forecasting API: `POST /predict`, Swagger at `/docs`.
 
-## About
-
-GlucoPulse ingests continuous glucose monitor readings (one every 5 minutes per patient, replayed from a real dataset) through a Kafka → TimescaleDB pipeline, engineers features in batch with PySpark, trains a Temporal Fusion Transformer to forecast glucose 30 and 60 minutes ahead, and serves that model through a lightweight standalone FastAPI/ONNX endpoint. Every claim in this README — dataset counts, RMSE numbers, latency tradeoffs — is measured against the actual data and actual trained model, not assumed or copied from a paper. Where a result came out worse than expected (an under-trained model losing to a naive baseline, a serving bug that silently returned wrong predictions), that's reported too; see [Forecasting Task](#forecasting-task) and the commit history for the honest version of how this was built.
-
-### What This Project Is
-
-- A **fault-tolerant ingestion pipeline** (Kafka, dead-letter queue, TimescaleDB) that treats a silently dropped or corrupted sensor reading as seriously as a crashed process.
-- A **real, measured forecasting benchmark**: a Temporal Fusion Transformer evaluated against a persistence baseline on fully held-out patients, not just trained and assumed to work.
-- A **standalone, deployable serving layer** (ONNX + INT8 quantization, PyTorch fallback for short history) that needs nothing but a model file to run — no live Kafka/TimescaleDB dependency — which is what makes the [live demo](#live-demo) above possible on a single free-tier container.
-
-### What This Project Is Not
-
-- Not a medical device, and not clinically validated — AZT1D is a research dataset, and the forecasting numbers below are a machine learning benchmark, not a clinical claim.
-- The live demo is the serving layer only. The full streaming pipeline (Kafka, TimescaleDB, Grafana, Airflow) runs locally via `docker compose up -d` — it's not something a free-tier Space can host, and this README doesn't pretend otherwise.
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue) ![Kafka](https://img.shields.io/badge/Kafka-streaming-black) ![PyTorch](https://img.shields.io/badge/PyTorch-TFT-orange) ![ONNX](https://img.shields.io/badge/ONNX-INT8-lightgrey) ![FHIR](https://img.shields.io/badge/FHIR-R4-red) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
-## The Engineering Problem
+## Highlights
 
-Continuous glucose monitors emit one reading every 5 minutes per patient. The interesting problem is not throughput — it is reliability. A silently corrupted reading, a dropped Kafka message, or an undetected sensor gap can cause a downstream forecasting model to produce wrong predictions without any visible error.
-
-GlucoPulse is designed around that constraint: fault-tolerant ingestion, orchestrated batch processing, and operational observability at every stage.
+| | |
+|---|---|
+| **Forecasting** | Temporal Fusion Transformer beats the persistence baseline on **fully held-out patients**: T+60 RMSE **37.65 vs 42.10 mg/dL** (−11%). At T+30, **85.5%** of forecasts land in Clarke Zone A and **0%** in the dangerous zones C/E. |
+| **Data reliability** | Kafka ingestion with a dead-letter queue. Exact duplicates are deduplicated, and **394 conflicting sensor readings** are quarantined instead of being resolved silently. |
+| **Serving** | ONNX + INT8 model with a PyTorch fallback for short history. It runs standalone from a single model file, with no database or Kafka, on a free-tier container. |
+| **Interoperability** | FHIR R4 facade (`Observation`, `Patient`, `$forecast`, `Provenance`, `AuditEvent`), SMART-scoped JWT auth that fails closed, and a hash-chained audit log. Round-trip tested against HAPI FHIR 7.4.0. |
+| **Clinical AI agent** | Drafts cited findings from FHIR data. Any sentence without a matching citation is dropped, and every draft goes to a human reviewer. The agent has no permission to approve its own output. |
 
 ---
 
 ## Architecture
 
 ```
-AZT1D CSV (dataset replay)
-         |
- Python Replay Producer
- (simulates sensor at 5s/reading)
-         |
-       Kafka
- (topic: cgm-raw | dead letter: cgm-dlq)
-         |
- Python Kafka Consumer ──────────────→ TimescaleDB
- (real-time feature compute:            (hypertable partitioned
-  glucose delta, rolling stats,          by patient + timestamp)
-  covariate joins)                              |
-                                           Grafana
-                                    (live ingestion + pipeline health)
-
-TimescaleDB
-         | (Airflow triggers weekly)
-   PySpark Batch Job
-   (lag features, window aggregates,
-    cross-patient normalization)
-         |
-   TFT Model Training (PyTorch)
-   (known-future: meal/insulin covariates
-    past-observed: glucose history)
-         |
-   ONNX Export + INT8 Quantization
-         |
-   FastAPI Inference Endpoint
-         |
-      Grafana
-   (RMSE vs persistence baseline,
-    CLARK error grid distribution)
+ AZT1D CSV ──► Replay producer ──► Kafka (cgm-raw / cgm-dlq) ──► Consumer ──► TimescaleDB ──► Grafana
+                                                                                  │
+                                                       Airflow (weekly) ──► PySpark features
+                                                                                  │
+                                                                     TFT training (PyTorch)
+                                                                                  │
+                                                                     ONNX export + INT8
+                                                                                  │
+                                         ┌────────────── FastAPI: /predict + FHIR R4 facade ──────────────┐
+                                         │                                                               │
+                                   EHR round trip                                       Clinical Reasoning Agent
+                                  (ehr/sync.py)                                (MCP tools → cited draft → human review)
 ```
 
 ---
 
-## Stack Decisions
+## Results
 
-Every component is justified by a specific requirement.
+Patient-level split: 18 train / 3 validation / 4 test patients, seed 42. The test patients are never seen during training.
 
-| Component | Requirement it satisfies |
+| Horizon | Model | RMSE (mg/dL) | MAE (mg/dL) |
+|---|---|---|---|
+| T+30 | Persistence baseline | 25.80 | 18.88 |
+| T+30 | **TFT** | **25.47** | **17.61** |
+| T+60 | Persistence baseline | 42.10 | 31.69 |
+| T+60 | **TFT** | **37.65** | **27.48** |
+
+- **Clarke error grid (T+30):** 85.5% A · 13.2% B · 1.3% D · 0% C/E
+- **Calibration:** 80% prediction intervals cover 76.6% (T+30) and 69.4% (T+60). They are under-confident at longer horizons, and this is the next thing to improve.
+- Source: `model/results/baseline_metrics.json`, `model/results/tft_eval.json`
+
+**Clinical agent eval** (20 synthetic patients, scripted model): textual citation precision 1.0, grounded citation precision 0.875, abstention accuracy 1.0. The 0.875 shows a known gap: the grounding step checks that a claim is cited, not that the cited resource was actually retrieved. Details are in [`docs/CLINICAL_AGENT.md`](docs/CLINICAL_AGENT.md).
+
+---
+
+## Key Design Decisions
+
+| Decision | Why |
 |---|---|
-| **Kafka** | Decouples sensor replay from processing; buffers data if consumer crashes; enables at-least-once delivery and offset management |
-| **Python Consumer** (not Spark Streaming) | Real-time path handles 1 msg/5min — Spark adds JVM overhead with zero throughput benefit at this scale |
-| **TimescaleDB** | `time_bucket()` and continuous aggregates for rolling glucose windows; hypertable partitioning for time-range queries; native Grafana data source |
-| **PySpark** | Batch feature engineering across all patients' full history is a legitimate distributed workload — runs on training path, not hot path |
-| **Airflow** | Retry logic, SLA alerting, and data-quality-gated job dependencies — none of which exist in cron |
-| **TFT (PyTorch)** | AZT1D includes bolus/basal/carb covariates that feed TFT's known-future and past-observed input channels; designed for multi-horizon probabilistic forecasting |
-| **ONNX + FastAPI** | Portable model artifact served via REST; decouples inference runtime from PyTorch training environment |
-| **Grafana** | A pipeline without monitoring does not exist in production |
+| **Kafka** between replay and storage | The consumer can crash without losing data. Replay resumes from the committed offset. |
+| **Python consumer**, not Spark Streaming | One message per 5 minutes per patient is far too little traffic to justify a JVM cluster. |
+| **PySpark** only on the batch path | Feature engineering over every patient's full history is a real distributed workload. The hot path isn't. |
+| **Airflow** over cron | Retries, SLAs and data-quality-gated dependencies. A silent 3 a.m. failure corrupts training data. |
+| **TimescaleDB** | `time_bucket()` and continuous aggregates for rolling glucose windows, and Grafana reads it natively. |
+| **TFT** | AZT1D has insulin and carb covariates, which map directly onto TFT's known-future and past-observed inputs. |
+| **ONNX + INT8** | Separates the inference runtime from the training stack, so the API ships as one small artifact. |
+| **Patient-level split** | Tests generalization to *new patients*, the realistic deployment case, not just to unseen weeks. |
 
 ---
 
-## Data Source
+## Dataset
 
-**AZT1D Dataset** — 25 Type 1 diabetes patients on automated insulin delivery systems, 28–49 days per patient (avg ~42 days / ~6 weeks), 5-minute CGM intervals (Dexcom G6 Pro), **306,712 total CGM readings** (measured directly from the downloaded files — the paper's abstract cites 320,488, but the real files don't match that; see `docs/QUESTIONS.md`). Collected at Mayo Clinic Scottsdale, Dec 2023–Apr 2024 (Arizona State University / Mayo Clinic Arizona; arXiv:2506.14789).
+**[AZT1D](https://data.mendeley.com/datasets/gk9m674wcx/1)** (CC BY 4.0, arXiv:2506.14789): 25 Type 1 diabetes patients on automated insulin delivery, about 6 weeks each, Dexcom G6 at 5-minute intervals. The downloaded files contain **306,712 CGM readings**, measured from the files themselves (the paper cites 320,488). Covariates include bolus and basal insulin, carbs, and device mode.
 
-Covariates: CGM glucose (mg/dL), bolus insulin (total dose, bolus type, correction amounts), basal insulin rate, carbohydrate intake, device mode (sleep/exercise — otherwise blank/regular).
-
-Openly licensed (CC BY 4.0), no application required: Mendeley Data, DOI [10.17632/gk9m674wcx.1](https://data.mendeley.com/datasets/gk9m674wcx/1). CSV format, one file per subject.
-
-Known data-quality issue (measured, not assumed): `EventDateTime` is a per-second event log, not a clean 5-minute grid — 823 (patient, timestamp) pairs across the dataset have more than one row. 429 are exact duplicates (silently deduplicated); 394 have genuinely conflicting values (e.g. two different CGM readings at the same second) and are routed to `cgm-dlq` rather than silently resolved. Real sensor gaps up to 23 hours also observed.
-
-(Originally scoped around OhioT1DM, which requires a gated institutional request. Switched to AZT1D to remove that external dependency and its redistribution/provenance ambiguity — same 5-minute CGM cadence, more patients. See `docs/QUESTIONS.md` for the full decision writeup.)
+Real data-quality problems handled in the pipeline: duplicate timestamps, conflicting readings at the same second, and sensor gaps of up to 23 hours. See [`docs/QUESTIONS.md`](docs/QUESTIONS.md).
 
 ---
 
-## Forecasting Task
+## Tech Stack & Dependencies
 
-Predict glucose value at **T+30 minutes** and **T+60 minutes**.
+Each service pins its own dependencies in its own `requirements.txt`. Docker Compose installs them inside each service's container, so you don't need a single global install.
 
-**Baseline:** Persistence model — predict the last known value. Every model is evaluated against this baseline first. (The commonly cited ~15–25 mg/dL T+30 RMSE figure is from OhioT1DM specifically and does not carry over to AZT1D — measured directly below, not assumed.)
+### Prerequisites
 
-**Model:** Temporal Fusion Transformer (`pytorch-forecasting`), trained on 18 patients, validated on 3, tested on 4 fully held-out patients (patient-level split, `model/splits.py`, seed 42) — generalization to unseen patients, not just unseen weeks. `min_encoder_length=6` (30 min) alongside `max_encoder_length=24` (2h) so the model learns to handle shorter real-world history (new sensor, a gap), not just a full 2h window — `model/train.py`.
+| Tool | Version | Used for |
+|---|---|---|
+| Docker + Docker Compose | 24+ (Docker Desktop, OrbStack, or Colima) | Running the full pipeline |
+| Python | 3.12 (3.11 inside the Airflow image) | Local dev, tests, model training |
+| Node.js | 22 | `priorauth-ui/` only |
+| AZT1D dataset | [Mendeley DOI 10.17632/gk9m674wcx.1](https://data.mendeley.com/datasets/gk9m674wcx/1) | Training and replay data |
 
-**Evaluation:** RMSE, MAE, and Clarke error grid (Zone A = clinically accurate, Zone E = dangerous), measured on the same held-out test patients for both models.
+### Infrastructure (`docker-compose.yml`)
 
-**Results (test set, `model/results/baseline_metrics.json` + `model/results/tft_eval.json`):**
+| Service | Image | Role |
+|---|---|---|
+| Kafka | `apache/kafka:3.7.0` (KRaft, no ZooKeeper) | `cgm-raw` stream + `cgm-dlq` dead-letter topic |
+| TimescaleDB | `timescale/timescaledb:2.16.1-pg16` | Time-series storage (host port **5544**) |
+| Airflow | `apache/airflow:2.9.3-python3.11` | Weekly PySpark feature job |
+| Grafana | `grafana/grafana:11.2.0` | Ingestion health + model RMSE dashboards |
+| HAPI FHIR | `hapiproject/hapi:v7.4.0` | Local EHR for the FHIR round-trip test |
+| Caddy | `caddy:2.8.4` | TLS termination in front of the serving API |
 
-| Horizon | Model | RMSE (mg/dL) | MAE (mg/dL) | n |
-|---|---|---|---|---|
-| T+30 | Persistence baseline | 25.80 | 18.88 | 30,109 |
-| T+30 | TFT | **25.47** | 17.61 | 30,621 |
-| T+60 | Persistence baseline | 42.10 | 31.69 | 29,984 |
-| T+60 | TFT | **37.65** | 27.48 | 30,621 |
+### Python packages by component
 
-The TFT beats the persistence baseline at both horizons — reported as measured, not assumed. (An earlier version of this table, from a checkpoint later found to have trained on roughly 2.6% of the available data due to a stale DB snapshot, showed the TFT losing to baseline at T+30; retraining on the full ~190K-example training set reversed that.) Clarke error grid at T+30: 85.5% Zone A, 13.2% Zone B, 1.3% Zone D, 0% Zones C/E (TFT); 80% prediction-interval coverage is 76.6% at T+30 and 69.4% at T+60 — improved over the under-trained checkpoint but still under-covering the nominal 80% target, a real calibration limitation, not hidden here.
+| Component | Manifest | Key packages (pinned) |
+|---|---|---|
+| Producer | `producer/requirements.txt` | `confluent-kafka 2.15.0` |
+| Consumer | `consumer/requirements.txt` | `confluent-kafka 2.15.0`, `psycopg2-binary 2.9.10` |
+| Batch features | `airflow/requirements.txt` | `pyspark 3.5.1`, `psycopg2-binary 2.9.10` |
+| Model training | `model/requirements.txt` | `torch 2.4.1`, `pytorch-lightning 2.4.0`, `pytorch-forecasting 1.1.1`, `scikit-learn 1.5.2`, `pandas 2.2.3`, `numpy 1.26.4`, `onnx 1.17.0`, `onnxruntime 1.19.2` |
+| Serving + FHIR | `serving/requirements.txt` | `fastapi 0.115.4`, `uvicorn 0.32.0`, `onnxruntime 1.19.2`, `torch 2.4.1`, `pytorch-forecasting 1.1.1`, `pyjwt[crypto] 2.9.0`, `psycopg2-binary 2.9.9` |
+| Clinical agent | `agents/requirements.txt` + `priorauth/requirements.txt` | `strands-agents 1.59.0`, `mcp ≥1.23`, `anthropic`, `openai` (only for the optional live demo) |
+| Prior-auth platform | `priorauth/requirements.txt` | `fastapi 0.143.0`, `sqlalchemy 2.1.4`, `psycopg 3.3.6`, `pgvector 0.5.1`, `pydantic 2.14.1`, `httpx 0.28.1`, `opentelemetry-sdk 1.45.1`, `prometheus-client 0.26.0`, `boto3`, `opensearch-py` |
+| Prior-auth fine-tuning | `priorauth/finetune/requirements-train.txt` | `transformers`, `peft`, `trl`, `bitsandbytes`, `accelerate`, `datasets` (GPU, optional) |
+| Hosted demos | `hf_space/requirements.txt`, `hf_space_agent/requirements.txt` | Smaller serving-only sets |
+| Dev / test | `priorauth/requirements-dev.txt` | `pytest ≥8`, `ruff ≥0.6`, plus `httpx` and `fhir.resources 8.3.0` (validates FHIR output in `tests/healthcare`) |
 
----
+### Frontend (`priorauth-ui/package.json`)
 
-## Project Structure
-
-```
-glucopulse/
-├── docker-compose.yml
-├── LICENSE
-├── producer/
-│   ├── Dockerfile
-│   └── replay_sensor.py
-├── consumer/
-│   ├── Dockerfile
-│   └── ingest.py
-├── spark/
-│   └── feature_job.py
-├── dags/
-│   └── glucopulse_dag.py
-├── model/
-│   ├── train.py            # TFT training (min/max_encoder_length, patient-level split)
-│   ├── evaluate.py         # TFT vs. persistence baseline, Clarke error grid
-│   ├── baseline.py         # persistence baseline
-│   ├── export_onnx.py      # ONNX export + INT8 quantization + parity check
-│   ├── artifacts/          # tft.ckpt, tft.onnx, scalers.json, training_dataset.pkl
-│   └── results/            # baseline_metrics.json, tft_eval.json
-├── serving/
-│   ├── Dockerfile           # standalone -- only needs model/artifacts/, no DB
-│   ├── requirements.txt
-│   └── api.py               # ONNX (full history) + PyTorch fallback (short history)
-├── hf_space/                # git submodule -- the live demo above, ONNX-only
-├── agents/                  # Clinical Reasoning Agent (MCP tools, citation grounding, quarantine)
-├── hf_space_agent/          # hosted demo for the Clinical Reasoning Agent
-├── ehr/                     # EHR <-> GlucoPulse FHIR round trip (sync.py)
-├── serving/healthcare/      # FHIR R4 facade, SMART auth, hash-chained audit log
-├── priorauth/               # separate prior-authorization agent platform (own README/SECURITY.md)
-├── monitoring/
-│   └── grafana/
-│       └── dashboards/
-├── data/
-│   └── azt1d/             # gitignored — download from Mendeley DOI above
-├── notebooks/
-│   └── eda.ipynb
-└── requirements.txt
-```
+`next ^16.4.6`, `react 19.3.0`, `tailwindcss 4`, `typescript 5`, plus `@playwright/test` and `@axe-core/playwright` for end-to-end and accessibility tests.
 
 ---
 
-## Healthcare Interoperability (FHIR, SMART, HIPAA controls)
+## Quickstart
 
-The serving layer also exposes a **FHIR R4 facade** (`/fhir`): CGM readings as `Observation` (LOINC 99504-3), pseudonymous `Patient`, a `$forecast` operation that returns the model's T+30/T+60 forecasts as `preliminary` Observations with `Device` and `Provenance`, and an `AuditEvent` feed. Access is SMART-scoped bearer-JWT (fail-closed), every call is written to a hash-chained, append-only audit log, and `ehr/sync.py` round-trips data with an EHR (verified against a local HAPI FHIR 7.4.0 server, synthetic data only).
-
-- [`docs/FHIR.md`](docs/FHIR.md) — resource mapping, endpoints, EHR round trip
-- [`docs/HIPAA_MAPPING.md`](docs/HIPAA_MAPPING.md) — Security Rule safeguards: what is implemented, what is not
-
-This **implements technical safeguards; it is not "HIPAA compliant"** (that is an organizational status) and it handles no PHI: the dataset is public and de-identified. Known gaps (encryption at rest, emergency access, bundled authorization server, CGM IG conformance) are listed in the mapping doc. `.venv/bin/pytest tests/healthcare -q` runs the suite.
-
-## Clinical Reasoning Agent
-
-A **clinical decision support** agent, never a decision maker, built on top of the FHIR facade above: it retrieves a patient's data through the same `/fhir` endpoints, drafts a cited finding, and that draft always routes to a human reviewer — the agent has no scope to approve, reject, or edit its own output. Every sentence in a finding needs a matching citation or it is dropped before any human sees it; if nothing survives and the agent didn't declare a data gap, that's forced into an honest abstention instead. See [`docs/CLINICAL_AGENT.md`](docs/CLINICAL_AGENT.md) for the architecture, the reuse map against this repo's existing FHIR/audit/auth code and `priorauth/`'s MCP/quarantine patterns, measured eval numbers from a 20-synthetic-patient harness (citation precision, abstention accuracy, quarantine accuracy), and what is verified versus not yet run live. `.venv-pa/bin/python -m pytest tests/agents -q` runs the suite (needs `strands`/`mcp`, not in the main venv). A hosted demo lives in `hf_space_agent/`.
-
----
-
-## Security
-
-See [`SECURITY.md`](SECURITY.md) for a consolidated view of the controls across this repo's FHIR facade, `/predict`, the Clinical Reasoning Agent, and `priorauth/` — and, just as importantly, the known gaps. The short version: **technical safeguards are implemented; nothing here is claimed as "compliant," and nothing here has ever handled real PHI.**
-
----
-
-## Prerequisites
-
-- Docker Desktop
-- Python 3.10+
-- AZT1D dataset (download from Mendeley DOI above)
-
----
-
-## Setup
+**1. Run the full pipeline (Docker)**
 
 ```bash
-git clone <repo-url>
-cd glucopulse
-
-python3 -m venv .venv
-source .venv/bin/activate
-
-pip install -r requirements.txt
-
-cp .env.example .env   # then edit credentials as needed
-
-docker compose up -d
+git clone https://github.com/srikarjy/GlucoPulse.git && cd GlucoPulse
+cp .env.example .env                     # set credentials
+# put the AZT1D CSVs in data/azt1d/ (the folder is gitignored)
+docker compose up -d                     # Kafka, TimescaleDB, Airflow, Grafana, producer, consumer, serving
 ```
 
-TimescaleDB is exposed on host port **5544** (not the default 5432) — this repo assumes a dev machine may already have a native PostgreSQL install bound to 5432/5433, so the container's host-side mapping was moved to avoid the collision. Inside the Docker network, other services still reach it at `timescaledb:5432`.
+**2. Local dev + healthcare tests**
+
+```bash
+python3.12 -m venv .venv && source .venv/bin/activate
+pip install -r serving/requirements.txt pytest httpx "fhir.resources==8.3.0"
+pytest tests/healthcare -q               # FHIR facade, SMART auth, audit log (50 tests)
+```
+
+**3. Clinical agent tests** (separate venv, because it needs a newer FastAPI and pydantic stack)
+
+```bash
+python3.12 -m venv .venv-pa
+.venv-pa/bin/pip install -r priorauth/requirements.txt -r priorauth/requirements-dev.txt
+.venv-pa/bin/python -m pytest tests/agents -q
+```
+
+**4. Prior-auth UI**
+
+```bash
+cd priorauth-ui && npm ci && npm run dev
+```
 
 ---
 
-## Build Phases
+## Repository Layout
 
-| Phase | Scope | Status |
-|---|---|---|
-| 1 — Foundation | Docker Compose: all services running with one command | Complete |
-| 2 — Ingestion | Producer → Kafka → Consumer → TimescaleDB + dead letter queue + Grafana | Complete |
-| 3 — Batch + Orchestration | PySpark feature job + Airflow DAGs + data quality gates | Complete |
-| 4 — ML + Serving | TFT training → ONNX export → FastAPI + Grafana RMSE panel | Complete |
-
----
-
-## Interview Talking Points
-
-**On Kafka over a direct database write:**
-Kafka decouples the sensor simulation from processing. If the consumer restarts, Kafka buffers messages and replay resumes from the last committed offset — no data loss.
-
-**On Python consumer over Spark Streaming:**
-CGM data is 1 message per 5 minutes per patient. Spark Streaming adds a JVM cluster with zero throughput benefit at this scale. The batch training path uses PySpark where the distributed workload is actually justified.
-
-**On Airflow over cron:**
-Cron has no retry logic, no dependency management, and no SLA alerting. A cron job that silently fails at 3am corrupts your training data without any signal. Airflow makes failures loud.
-
-**On the model as a pipeline validator:**
-If prediction RMSE degrades, it signals either a model problem or a data quality problem upstream. Grafana surfaces which one it is.
+```
+producer/  consumer/       Kafka replay + ingestion (with DLQ)
+spark/  dags/              PySpark features, Airflow orchestration
+model/                     TFT training, evaluation, baseline, ONNX export, results
+serving/                   FastAPI /predict + serving/healthcare (FHIR R4, SMART auth, audit log)
+ehr/                       EHR <-> GlucoPulse FHIR round trip
+agents/                    Clinical Reasoning Agent (MCP tools, citation grounding, quarantine)
+priorauth/                 Prior-authorization agent platform (see docs/priorauth/)
+hf_space/  hf_space_agent/ Hosted demos
+monitoring/grafana/        Dashboards
+docs/                      FHIR.md, HIPAA_MAPPING.md, CLINICAL_AGENT.md, QUESTIONS.md
+```
 
 ---
+
+## Scope & Limitations
+
+- **Not a medical device** and not clinically validated. The forecasts are an ML benchmark on a research dataset.
+- **No PHI.** The data is public and de-identified, and the FHIR/EHR tests use synthetic data only.
+- **Technical HIPAA safeguards are implemented, but the project is not "HIPAA compliant"**, which is an organizational status. The gaps (encryption at rest, emergency access, authorization server) are listed in [`docs/HIPAA_MAPPING.md`](docs/HIPAA_MAPPING.md) and [`SECURITY.md`](SECURITY.md).
+- The live demo hosts only the serving layer. The full pipeline runs locally with Docker Compose.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). The AZT1D dataset itself is separately licensed CC BY 4.0 by its authors (see [Data Source](#data-source)); that license covers the data, not this codebase.
+MIT, see [LICENSE](LICENSE). The AZT1D dataset is licensed separately under CC BY 4.0.
