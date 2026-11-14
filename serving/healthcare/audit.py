@@ -73,6 +73,7 @@ class AuditLogger:
         resource_type: str, patient: Optional[str], outcome: str,
         purpose_of_use: str = "unspecified", method: str = "", path: str = "",
         status: int = 0, request_id: str = "", source_ip: str = "",
+        detail: Optional[dict] = None,
     ) -> dict:
         entry = {
             "ts": datetime.now(timezone.utc).isoformat(),
@@ -81,6 +82,10 @@ class AuditLogger:
             "purpose_of_use": purpose_of_use, "method": method, "path": path,
             "status": status, "request_id": request_id, "source_ip": source_ip,
         }
+        # Omitted entirely (not even a null key) when unset, so every existing
+        # call site's hash is byte-identical to before this field existed.
+        if detail is not None:
+            entry["detail"] = detail
         with self._lock:
             entry["prev_hash"] = self._prev
             entry["entry_hash"] = _hash(self._prev, {k: v for k, v in entry.items()

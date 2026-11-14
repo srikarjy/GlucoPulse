@@ -152,6 +152,11 @@ glucopulse/
 │   ├── requirements.txt
 │   └── api.py               # ONNX (full history) + PyTorch fallback (short history)
 ├── hf_space/                # git submodule -- the live demo above, ONNX-only
+├── agents/                  # Clinical Reasoning Agent (MCP tools, citation grounding, quarantine)
+├── hf_space_agent/          # hosted demo for the Clinical Reasoning Agent
+├── ehr/                     # EHR <-> GlucoPulse FHIR round trip (sync.py)
+├── serving/healthcare/      # FHIR R4 facade, SMART auth, hash-chained audit log
+├── priorauth/               # separate prior-authorization agent platform (own README/SECURITY.md)
 ├── monitoring/
 │   └── grafana/
 │       └── dashboards/
@@ -172,6 +177,18 @@ The serving layer also exposes a **FHIR R4 facade** (`/fhir`): CGM readings as `
 - [`docs/HIPAA_MAPPING.md`](docs/HIPAA_MAPPING.md) — Security Rule safeguards: what is implemented, what is not
 
 This **implements technical safeguards; it is not "HIPAA compliant"** (that is an organizational status) and it handles no PHI: the dataset is public and de-identified. Known gaps (encryption at rest, emergency access, bundled authorization server, CGM IG conformance) are listed in the mapping doc. `.venv/bin/pytest tests/healthcare -q` runs the suite.
+
+## Clinical Reasoning Agent
+
+A **clinical decision support** agent, never a decision maker, built on top of the FHIR facade above: it retrieves a patient's data through the same `/fhir` endpoints, drafts a cited finding, and that draft always routes to a human reviewer — the agent has no scope to approve, reject, or edit its own output. Every sentence in a finding needs a matching citation or it is dropped before any human sees it; if nothing survives and the agent didn't declare a data gap, that's forced into an honest abstention instead. See [`docs/CLINICAL_AGENT.md`](docs/CLINICAL_AGENT.md) for the architecture, the reuse map against this repo's existing FHIR/audit/auth code and `priorauth/`'s MCP/quarantine patterns, measured eval numbers from a 20-synthetic-patient harness (citation precision, abstention accuracy, quarantine accuracy), and what is verified versus not yet run live. `.venv-pa/bin/python -m pytest tests/agents -q` runs the suite (needs `strands`/`mcp`, not in the main venv). A hosted demo lives in `hf_space_agent/`.
+
+---
+
+## Security
+
+See [`SECURITY.md`](SECURITY.md) for a consolidated view of the controls across this repo's FHIR facade, `/predict`, the Clinical Reasoning Agent, and `priorauth/` — and, just as importantly, the known gaps. The short version: **technical safeguards are implemented; nothing here is claimed as "compliant," and nothing here has ever handled real PHI.**
+
+---
 
 ## Prerequisites
 

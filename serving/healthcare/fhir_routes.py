@@ -37,7 +37,6 @@ GRID_TOLERANCE = timedelta(seconds=90)
 MIN_HISTORY, MAX_HISTORY = 6, 24
 MAX_BUNDLE_ENTRIES = 288  # 24h of 5-min readings
 CGM_MIN, CGM_MAX = 40.0, 400.0  # Dexcom G6 reporting range; same bound as the DLQ policy
-MODEL_VERSION = "v1"
 
 Readings = list[tuple[datetime, float]]
 # Returns {30: (pred, lo, hi), 60: (pred, lo, hi)}
@@ -69,6 +68,27 @@ class InMemoryStore:
         return self._d.get(pseudonym, [])[-n:]
 
 
+# (note_id, timestamp, text)
+Notes = list[tuple[str, datetime, str]]
+
+
+class NoteStore(Protocol):
+    def notes(self, pseudonym: str) -> Notes: ...
+
+
+class InMemoryNoteStore:
+    """Test/demo note store keyed by pseudonym. Separate from
+    ReadingStore/InMemoryStore on purpose: a deployment can run the
+    Observation facade without ever configuring notes (most of this repo
+    doesn't need them), and the two have unrelated access patterns."""
+
+    def __init__(self, data: dict[str, Notes]):
+        self._d = {k: sorted(v, key=lambda n: n[1]) for k, v in data.items()}
+
+    def notes(self, pseudonym: str) -> Notes:
+        return self._d.get(pseudonym, [])
+
+
 class FhirError(Exception):
     def __init__(self, status: int, code: str, message: str, headers: Optional[dict] = None,
                  severity: str = "error"):
@@ -85,8 +105,15 @@ def _public_url() -> str:
 
 
 def install(app: FastAPI, *, audit: AuditLogger, forecast_fn: ForecastFn,
-            store: Optional[ReadingStore] = None) -> None:
-    """Mount the FHIR facade on `app`."""
+            store: Optional[ReadingStore] = None, model_version: str = "v1",
+            notes: Optional[NoteStore] = None) -> None:
+    """Mount the FHIR facade on `app`.
+
+    `model_version` should be derived from whatever artifact `forecast_fn`
+    actually loaded (the caller knows; this module deliberately doesn't
+    import torch/onnx to find out itself) -- it ends up on every forecast's
+    Device resource so a bad prediction can be traced to the model that made
+    it."""
 
     @app.exception_handler(FhirError)
     async def _fhir_error(_: Request, exc: FhirError):
@@ -211,6 +238,25 @@ def install(app: FastAPI, *, audit: AuditLogger, forecast_fn: ForecastFn,
         return _resp(fm.bundle([fm.observation_from_reading(pid, t, v) for t, v in rows],
                                "searchset", total=total, links=links))
 
+    # ---- DocumentReference (clinical notes) -------------------------------
+
+    @router.get("/DocumentReference")
+    def search_document_reference(
+        request: Request,
+        patient: str = Query(..., description="Patient id (required; bulk access is not offered)"),
+        count: int = Query(100, ge=1, le=1000, alias="_count"),
+        who: Principal = Depends(guard("DocumentReference", "read", "search")),
+        x_purpose_of_use: Optional[str] = Header(default=None),
+    ):
+        pid = _patient_or_404(request, who, "DocumentReference", "search", patient, x_purpose_of_use)
+        if notes is None:
+            _log(request, who, "search", "DocumentReference", pid, "error", 501, x_purpose_of_use)
+            raise FhirError(501, "not-supported", "No note store configured on this deployment.")
+        rows = notes.notes(pid)[:count]
+        _log(request, who, "search", "DocumentReference", pid, "success", 200, x_purpose_of_use)
+        return _resp(fm.bundle([fm.document_reference_from_note(pid, ts, note_id, text)
+                               for note_id, ts, text in rows], "searchset", total=len(rows)))
+
     # ---- $forecast -------------------------------------------------------
 
     @router.post("/Patient/{pid}/$forecast")
@@ -257,7 +303,7 @@ def install(app: FastAPI, *, audit: AuditLogger, forecast_fn: ForecastFn,
         preds = forecast_fn(run)
         issued = datetime.now(timezone.utc)
         last_t = run[-1][0]
-        device = fm.device_resource(MODEL_VERSION)
+        device = fm.device_resource(model_version)
         obs = [fm.forecast_observation(pid, issued, last_t + timedelta(minutes=h), h,
                                        p, lo, hi, device["id"])
                for h, (p, lo, hi) in sorted(preds.items())]

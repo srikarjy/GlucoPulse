@@ -24,6 +24,7 @@ conform to the HL7 CGM IG profiles -- that conformance check is not done.
 
 from __future__ import annotations
 
+import base64
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Iterable, Optional
@@ -103,6 +104,47 @@ def observation_from_reading(pseudonym: str, ts: datetime, glucose_mgdl: float) 
     }
 
 
+def document_reference_from_note(pseudonym: str, ts: datetime, note_id: str, text: str) -> dict:
+    """Clinical note as a FHIR DocumentReference. Text travels base64 in
+    `content[].attachment.data`, the standard FHIR way to carry inline
+    document bytes -- added for the clinical-reasoning agent's quarantine
+    step (agents/quarantine.py), which needs real note text to quarantine
+    against rather than a hand-built fixture bypassing the facade."""
+    return {
+        "resourceType": "DocumentReference",
+        "id": det_id("docref", pseudonym, note_id),
+        "status": "current",
+        "type": {"text": "Clinical Note"},
+        "subject": {"reference": f"Patient/{pseudonym}"},
+        "date": iso(ts),
+        "content": [{"attachment": {
+            "contentType": "text/plain",
+            "data": base64.b64encode(text.encode()).decode(),
+        }}],
+    }
+
+
+def notes_from_bundle(bundle_json: dict) -> list[tuple[str, str, str]]:
+    """Extract (note_id, date, text) from a Bundle of DocumentReferences,
+    oldest first -- mirrors readings_from_bundle's extraction shape."""
+    out: list[tuple[str, str, str]] = []
+    for entry in bundle_json.get("entry", []):
+        r = entry.get("resource", {})
+        if r.get("resourceType") != "DocumentReference":
+            continue
+        content = (r.get("content") or [{}])[0].get("attachment", {})
+        data = content.get("data")
+        if not data:
+            continue
+        try:
+            text = base64.b64decode(data).decode()
+        except (ValueError, UnicodeDecodeError):
+            continue
+        out.append((r.get("id", ""), r.get("date", ""), text))
+    out.sort(key=lambda t: t[1])
+    return out
+
+
 def device_resource(model_version: str) -> dict:
     return {
         "resourceType": "Device",
@@ -135,8 +177,15 @@ def forecast_observation(
         "meta": {"tag": [{"system": TAG_SYSTEM, "code": "model-forecast",
                           "display": "Model-generated forecast, not a measurement"}]},
         "status": "preliminary",
+        # Not "laboratory": that category plus the real-measurement LOINC code
+        # is exactly what let a flowsheet (or this codebase's own sync loop,
+        # before the _is_usable_reading fix) mistake a forecast for a real
+        # lab result. meta.tag is the authoritative "this is a forecast"
+        # signal; category here only has to avoid asserting "this is a lab
+        # result" a second time.
         "category": [{
-            "coding": [{"system": OBS_CATEGORY, "code": "laboratory", "display": "Laboratory"}]
+            "coding": [{"system": TAG_SYSTEM, "code": "model-forecast",
+                       "display": "Model-generated forecast, not a measurement"}]
         }],
         "code": _cgm_code(),
         "subject": {"reference": f"Patient/{pseudonym}"},
@@ -228,6 +277,11 @@ def capability_statement(base_url: str, auth_enabled: bool) -> dict:
                         {"name": "date", "type": "date"},
                         {"name": "_count", "type": "number"},
                     ]}),
+                res("DocumentReference", ["search-type"], {
+                    "searchParam": [
+                        {"name": "patient", "type": "reference"},
+                        {"name": "_count", "type": "number"},
+                    ]}),
                 res("AuditEvent", ["search-type"]),
             ],
             "operation": [{
@@ -273,13 +327,16 @@ def readings_from_bundle(bundle_json: dict) -> list[tuple[datetime, float]]:
 
     Accepts mg/dL and mmol/L (UCUM) -- EHRs outside the US report mmol/L.
     Anything else (wrong code, no value, unknown unit) is skipped, not coerced.
-    Forecast Observations (AIAST-tagged) are skipped so a round-tripped bundle
-    can't feed the model its own predictions.
+    Retracted readings (`entered-in-error`/`cancelled`) are skipped. Forecast
+    Observations (model-forecast/AIAST-tagged) are skipped so a round-tripped
+    bundle can't feed the model its own predictions.
     """
     out: dict[datetime, float] = {}
     for entry in bundle_json.get("entry", []):
         r = entry.get("resource", {})
         if r.get("resourceType") != "Observation":
+            continue
+        if r.get("status") in {"entered-in-error", "cancelled"}:
             continue
         if any(t.get("code") in FORECAST_TAGS for t in r.get("meta", {}).get("tag", [])):
             continue
