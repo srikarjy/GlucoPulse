@@ -18,8 +18,11 @@ Both paths return T+30 and T+60 minute predictions with 80% prediction
 intervals.
 """
 
+import hashlib
 import json
 import os
+import uuid
+from datetime import timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -27,9 +30,12 @@ import numpy as np
 import onnxruntime as ort
 import pandas as pd
 import torch
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from pydantic import BaseModel, Field
 from pytorch_forecasting import TemporalFusionTransformer
+
+from serving.healthcare.audit import AuditLogger
+from serving.healthcare.security import auth_enabled, authenticate
 
 app = FastAPI(title="GlucoPulse Inference API", version="1.1.0")
 
@@ -38,6 +44,24 @@ CHECKPOINT_PATH = Path(__file__).parent.parent / "model" / "artifacts" / "tft.ck
 SCALERS_PATH = Path(__file__).parent.parent / "model" / "artifacts" / "scalers.json"
 FULL_HISTORY_STEPS = 24  # 2h at 5-min intervals
 DECODER_STEPS = 12  # 60 min ahead, 5-min steps -- also train.py's MAX_PREDICTION_LENGTH
+STALE_AFTER = timedelta(minutes=15)  # ~3x the 5-min grid; older history isn't a genuine forecast
+PREDICT_DISCLAIMER = (
+    "Research forecasting model. Not a medical device and not clinically "
+    "validated; not for diagnosis or treatment decisions.")
+
+_model_version: Optional[str] = None
+
+
+def model_version() -> str:
+    """Short content hash of whichever artifact is actually loaded, so a
+    bad prediction can be traced back to the model that produced it instead
+    of a hardcoded label that drifts from reality the moment the artifact
+    is retrained."""
+    global _model_version
+    if _model_version is None:
+        path = MODEL_PATH if MODEL_PATH.exists() else CHECKPOINT_PATH
+        _model_version = hashlib.sha256(path.read_bytes()).hexdigest()[:12] if path.exists() else "unknown"
+    return _model_version
 
 # Feature columns in the order expected by the model (matches
 # training_dataset.pkl's `reals`: pytorch_forecasting auto-prepends
@@ -112,6 +136,8 @@ class PredictionResponse(BaseModel):
     """Response with glucose predictions."""
     patient_id: str
     prediction_time: str
+    model_version: str
+    disclaimer: str
     t30_min: dict
     t60_min: dict
 
@@ -267,6 +293,39 @@ def prepare_inputs_torch(request: InferenceRequest) -> dict:
     }
 
 
+def _check_not_stale(last_time: pd.Timestamp) -> None:
+    now = pd.Timestamp.now(tz="UTC")
+    last_time = last_time.tz_localize("UTC") if last_time.tzinfo is None else last_time
+    age = now - last_time
+    if age > STALE_AFTER:
+        raise HTTPException(422, detail=(
+            f"Latest reading is {age} old (> {STALE_AFTER}); refusing to forecast from stale data."))
+
+
+def _check_quantile_order(q10: float, median: float, q90: float, horizon_label: str) -> None:
+    if not (q10 <= median <= q90):
+        raise HTTPException(500, detail=(
+            f"Model produced invalid quantile ordering at {horizon_label} "
+            f"(p10={q10}, p50={median}, p90={q90}); refusing to return an unsafe forecast."))
+
+
+_healthcare_audit: Optional[AuditLogger] = None
+
+
+def _audit_predict(status: int, outcome: str, patient_id: str, req: Request, who) -> None:
+    if _healthcare_audit is None:
+        return
+    _healthcare_audit.record(
+        actor=who.sub if who else "anonymous",
+        client_id=who.client_id if who else None,
+        action="predict", resource_type="Observation", patient=patient_id,
+        outcome=outcome, purpose_of_use="unspecified",
+        method="POST", path="/predict", status=status,
+        request_id=req.headers.get("x-request-id") or str(uuid.uuid4()),
+        source_ip=req.client.host if req.client else "",
+    )
+
+
 @app.get("/health", response_model=HealthResponse)
 async def health():
     try:
@@ -321,48 +380,80 @@ def fhir_forecast(readings: list) -> dict:
 
 
 @app.post("/predict", response_model=PredictionResponse)
-async def predict(request: InferenceRequest):
-    prediction = _predict_array(request)  # Shape: (1, 12, 7) - 7 quantiles
+async def predict(request: InferenceRequest, req: Request,
+                  authorization: Optional[str] = Header(default=None)):
+    # Fails closed only when this deployment actually has auth configured --
+    # the standalone public demo image (no GLUCOPULSE_AUTH_MODE set) stays
+    # open on purpose, same as _install_healthcare's docstring says. A real
+    # clinical deployment sets auth, and /predict now honors it instead of
+    # being a side door around the FHIR facade's guard().
+    who = None
+    if auth_enabled():
+        try:
+            who = authenticate(authorization)
+        except HTTPException as exc:
+            _audit_predict(exc.status_code, "denied", request.patient_id, req, None)
+            raise
 
-    # Extract median (quantile 0.5 is at index 3 for 7 quantiles: 0.02, 0.1, 0.25, 0.5, 0.75, 0.9, 0.98)
-    median_pred = prediction[0, :, 3]  # (12,)
-    q10 = prediction[0, :, 1]  # 10th percentile
-    q90 = prediction[0, :, 5]  # 90th percentile
+    try:
+        last_time_ts = pd.Timestamp(request.readings[-1].timestamp)
+        _check_not_stale(last_time_ts)
 
-    # T+30 = step 5 (0-indexed), T+60 = step 11
-    t30_idx = 5
-    t60_idx = 11
+        prediction = _predict_array(request)  # Shape: (1, 12, 7) - 7 quantiles
 
-    last_time = np.datetime64(request.readings[-1].timestamp.replace('Z', '+00:00'))
-    pred_time_30 = last_time + np.timedelta64(30, 'm')
-    pred_time_60 = last_time + np.timedelta64(60, 'm')
+        # Extract median (quantile 0.5 is at index 3 for 7 quantiles: 0.02, 0.1, 0.25, 0.5, 0.75, 0.9, 0.98)
+        median_pred = prediction[0, :, 3]  # (12,)
+        q10 = prediction[0, :, 1]  # 10th percentile
+        q90 = prediction[0, :, 5]  # 90th percentile
 
-    return PredictionResponse(
-        patient_id=request.patient_id,
-        prediction_time=str(last_time),
-        t30_min={
-            "predicted_glucose": float(median_pred[t30_idx]),
-            "prediction_interval_80pct": [float(q10[t30_idx]), float(q90[t30_idx])],
-            "prediction_time": str(pred_time_30),
-        },
-        t60_min={
-            "predicted_glucose": float(median_pred[t60_idx]),
-            "prediction_interval_80pct": [float(q10[t60_idx]), float(q90[t60_idx])],
-            "prediction_time": str(pred_time_60),
-        },
-    )
+        # T+30 = step 5 (0-indexed), T+60 = step 11
+        t30_idx = 5
+        t60_idx = 11
+        _check_quantile_order(float(q10[t30_idx]), float(median_pred[t30_idx]), float(q90[t30_idx]), "T+30")
+        _check_quantile_order(float(q10[t60_idx]), float(median_pred[t60_idx]), float(q90[t60_idx]), "T+60")
+
+        last_time = np.datetime64(request.readings[-1].timestamp.replace('Z', '+00:00'))
+        pred_time_30 = last_time + np.timedelta64(30, 'm')
+        pred_time_60 = last_time + np.timedelta64(60, 'm')
+
+        response = PredictionResponse(
+            patient_id=request.patient_id,
+            prediction_time=str(last_time),
+            model_version=model_version(),
+            disclaimer=PREDICT_DISCLAIMER,
+            t30_min={
+                "predicted_glucose": float(median_pred[t30_idx]),
+                "prediction_interval_80pct": [float(q10[t30_idx]), float(q90[t30_idx])],
+                "prediction_time": str(pred_time_30),
+            },
+            t60_min={
+                "predicted_glucose": float(median_pred[t60_idx]),
+                "prediction_interval_80pct": [float(q10[t60_idx]), float(q90[t60_idx])],
+                "prediction_time": str(pred_time_60),
+            },
+        )
+    except HTTPException as exc:
+        _audit_predict(exc.status_code, "error", request.patient_id, req, who)
+        raise
+
+    _audit_predict(200, "success", request.patient_id, req, who)
+    return response
 
 
 def _install_healthcare() -> None:
     """Mount the FHIR facade. Fully optional: the public demo image doesn't
-    ship the healthcare package's DB/auth config, and /predict is unaffected."""
+    ship the healthcare package's DB/auth config, and /predict stays open
+    in that case -- but shares this same audit trail and model_version()
+    once a deployment does configure auth (see predict())."""
+    global _healthcare_audit
     from serving.healthcare import fhir_routes
-    from serving.healthcare.audit import AuditLogger
     store = None
     if os.getenv("PG_HOST"):
         from serving.healthcare.pg_store import PostgresReadingStore
         store = PostgresReadingStore.from_env()
-    fhir_routes.install(app, audit=AuditLogger(), forecast_fn=fhir_forecast, store=store)
+    _healthcare_audit = AuditLogger()
+    fhir_routes.install(app, audit=_healthcare_audit, forecast_fn=fhir_forecast, store=store,
+                        model_version=model_version())
 
 
 _install_healthcare()
