@@ -141,7 +141,7 @@ def authenticate(authorization: Optional[str] = Header(default=None)) -> Princip
     except jwt.PyJWTError:
         # Same message for every failure: don't tell a caller *why* a token failed.
         raise HTTPException(status_code=401, detail="Invalid or expired token.",
-                            headers={"WWW-Authenticate": "Bearer"})
+                            headers={"WWW-Authenticate": "Bearer"}) from None
     ttl = int(claims["exp"]) - int(claims["iat"])
     if ttl > _config()["max_ttl"]:
         raise HTTPException(status_code=401, detail="Token lifetime exceeds server maximum.",

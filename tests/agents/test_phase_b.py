@@ -124,14 +124,26 @@ def mcp_url(box):
     t.join(5)
 
 
-def test_grounded_finding_survives_regrounding(mcp_url, capsys):
+def _last_obs_id(box) -> str:
+    """The real id the facade assigns -- citations must point at a resource
+    the tools actually returned (agents.citation rejects anything else)."""
+    from agents.mcp_server.auth import Principal
+    from agents.mcp_server.tools import LocalGateway
+    gw = LocalGateway(box, Principal(subject="test-reader", role="clinical-agent",
+                                     scopes=frozenset({"fhir:read"})))
+    bundle = gw.invoke("fhir_search", patient=PATIENT_A, count=100)
+    return f"Observation/{bundle['entry'][-1]['resource']['id']}"
+
+
+def test_grounded_finding_survives_regrounding(mcp_url, box, capsys):
     """A properly cited, single-sentence finding passes through unchanged."""
+    obs_id = _last_obs_id(box)
     turns = [
         ("tool", "fhir_search", {"patient": PATIENT_A, "count": 100}),
         ("text", json.dumps({
             "finding": "The patient's most recent glucose reading was 143 mg/dL.",
             "evidence": [{"claim": "The patient's most recent glucose reading was 143 mg/dL.",
-                         "fhir_resource_id": "Observation/last", "kb_source": None}],
+                         "fhir_resource_id": obs_id, "kb_source": None}],
             "confidence": "high", "missing_data": [], "red_flags": [],
         })),
     ]
@@ -144,15 +156,16 @@ def test_grounded_finding_survives_regrounding(mcp_url, capsys):
     assert "dropped" not in " ".join(finding.red_flags)
 
 
-def test_uncited_sentence_is_dropped(mcp_url, capsys):
+def test_uncited_sentence_is_dropped(mcp_url, box, capsys):
     """The citation rule: a second, uncited sentence must not survive."""
+    obs_id = _last_obs_id(box)
     turns = [
         ("tool", "fhir_search", {"patient": PATIENT_A, "count": 100}),
         ("text", json.dumps({
             "finding": "The patient's most recent glucose reading was 143 mg/dL. "
                       "The patient is at high risk of complications.",
             "evidence": [{"claim": "The patient's most recent glucose reading was 143 mg/dL.",
-                         "fhir_resource_id": "Observation/last", "kb_source": None}],
+                         "fhir_resource_id": obs_id, "kb_source": None}],
             "confidence": "med", "missing_data": [], "red_flags": [],
         })),
     ]

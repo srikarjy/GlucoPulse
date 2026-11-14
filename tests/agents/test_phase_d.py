@@ -12,7 +12,6 @@ Run from repo root (needs strands/mcp):
 """
 from __future__ import annotations
 
-import json
 import os
 import secrets
 import time
@@ -82,12 +81,12 @@ def test_full_chain_tool_call_draft_and_review_decision(box_and_audit_path):
         {"claim": "Most recent reading 143 mg/dL.",
          "fhir_resource_id": f"Observation/{search_result['entry'][-1]['resource']['id']}"}],
         "confidence": "high", "missing_data": [], "red_flags": []}
-    draft_entry = agent_gw.invoke("audit_write", action="draft_finding", resource_type="ClinicalFinding",
+    agent_gw.invoke("audit_write", action="draft_finding", resource_type="ClinicalFinding",
                                   patient=PATIENT, outcome="success", detail=draft,
                                   idempotency_key="draft-001")
 
     # 3. A human reviewer approves it.
-    decision_entry = reviewer_gw.invoke("submit_review_decision", patient=PATIENT, reviewer="dr-smith",
+    reviewer_gw.invoke("submit_review_decision", patient=PATIENT, reviewer="dr-smith",
                                         decision="approve", finding=draft, idempotency_key="decision-001")
 
     # All three actions are in the SAME chain, in order, each linking to the previous hash.
