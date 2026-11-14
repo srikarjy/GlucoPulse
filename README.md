@@ -173,6 +173,16 @@ The serving layer also exposes a **FHIR R4 facade** (`/fhir`): CGM readings as `
 
 This **implements technical safeguards; it is not "HIPAA compliant"** (that is an organizational status) and it handles no PHI: the dataset is public and de-identified. Known gaps (encryption at rest, emergency access, bundled authorization server, CGM IG conformance) are listed in the mapping doc. `.venv/bin/pytest tests/healthcare -q` runs the suite.
 
+## Clinical Reasoning Agent
+
+A **clinical decision support** agent, never a decision maker, built on top of the FHIR facade above: it retrieves
+a patient's data through the same `/fhir` endpoints, drafts a cited finding, and that draft always routes to a
+human reviewer — the agent has no scope to approve, reject, or edit its own output. See
+[`docs/CLINICAL_AGENT.md`](docs/CLINICAL_AGENT.md) for the architecture, the reuse map against this repo's existing
+FHIR/audit/auth code and `priorauth/`'s MCP/quarantine patterns, measured eval numbers from a 20-synthetic-patient
+harness (citation precision, abstention accuracy, quarantine accuracy), and what is verified versus not yet run
+live. `.venv-pa/bin/python -m pytest tests/agents -q` runs the suite (needs `strands`/`mcp`, not in the main venv).
+
 ## Prerequisites
 
 - Docker Desktop
