@@ -300,7 +300,7 @@ def test_audit_chain_detects_tampering(ctx):
 def test_audit_chain_survives_restart(tmp_path):
     p = str(tmp_path / "a.jsonl")
     a = AuditLogger(path=p, pg_dsn=None)
-    for i in range(3):
+    for _ in range(3):
         a.record(actor="u", client_id=None, action="read", resource_type="Patient",
                  patient=PID, outcome="success")
     b = AuditLogger(path=p, pg_dsn=None)

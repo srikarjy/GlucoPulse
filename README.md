@@ -6,7 +6,7 @@ GlucoPulse moves continuous glucose monitor data from sensor to forecast reliabl
 
 **Live demo:** [srikarjy025-glucopulse.hf.space](https://srikarjy025-glucopulse.hf.space) · [Vercel mirror](https://glucopulse-inference.vercel.app). This is the forecasting API: `POST /predict`, Swagger at `/docs`.
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue) ![Kafka](https://img.shields.io/badge/Kafka-streaming-black) ![PyTorch](https://img.shields.io/badge/PyTorch-TFT-orange) ![ONNX](https://img.shields.io/badge/ONNX-INT8-lightgrey) ![FHIR](https://img.shields.io/badge/FHIR-R4-red) ![License](https://img.shields.io/badge/license-MIT-green)
+[![glucopulse-ci](https://github.com/srikarjy/GlucoPulse/actions/workflows/glucopulse-ci.yml/badge.svg)](https://github.com/srikarjy/GlucoPulse/actions/workflows/glucopulse-ci.yml) [![priorauth-ci](https://github.com/srikarjy/GlucoPulse/actions/workflows/priorauth-ci.yml/badge.svg)](https://github.com/srikarjy/GlucoPulse/actions/workflows/priorauth-ci.yml) ![Python](https://img.shields.io/badge/Python-3.10%2B-blue) ![Kafka](https://img.shields.io/badge/Kafka-streaming-black) ![PyTorch](https://img.shields.io/badge/PyTorch-TFT-orange) ![ONNX](https://img.shields.io/badge/ONNX-INT8-lightgrey) ![FHIR](https://img.shields.io/badge/FHIR-R4-red) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ---
 
@@ -56,7 +56,7 @@ Patient-level split: 18 train / 3 validation / 4 test patients, seed 42. The tes
 - **Calibration:** 80% prediction intervals cover 76.6% (T+30) and 69.4% (T+60). They are under-confident at longer horizons, and this is the next thing to improve.
 - Source: `model/results/baseline_metrics.json`, `model/results/tft_eval.json`
 
-**Clinical agent eval** (20 synthetic patients, scripted model): textual citation precision 1.0, grounded citation precision 0.875, abstention accuracy 1.0. The 0.875 shows a known gap: the grounding step checks that a claim is cited, not that the cited resource was actually retrieved. Details are in [`docs/CLINICAL_AGENT.md`](docs/CLINICAL_AGENT.md).
+**Clinical agent eval** (20 synthetic patients, scripted model): citation precision 1.0 (textual and resource-grounded), abstention accuracy 1.0, quarantine accuracy 1.0. Every FHIR citation is checked against the resources the tools actually returned, so a model that invents a reference has its sentence dropped and the finding forced into abstention. These numbers test the guardrails, not live LLM judgment. Details are in [`docs/CLINICAL_AGENT.md`](docs/CLINICAL_AGENT.md).
 
 ---
 
@@ -120,7 +120,7 @@ Each service pins its own dependencies in its own `requirements.txt`. Docker Com
 | Prior-auth platform | `priorauth/requirements.txt` | `fastapi 0.143.0`, `sqlalchemy 2.1.4`, `psycopg 3.3.6`, `pgvector 0.5.1`, `pydantic 2.14.1`, `httpx 0.28.1`, `opentelemetry-sdk 1.45.1`, `prometheus-client 0.26.0`, `boto3`, `opensearch-py` |
 | Prior-auth fine-tuning | `priorauth/finetune/requirements-train.txt` | `transformers`, `peft`, `trl`, `bitsandbytes`, `accelerate`, `datasets` (GPU, optional) |
 | Hosted demos | `hf_space/requirements.txt`, `hf_space_agent/requirements.txt` | Smaller serving-only sets |
-| Dev / test | `priorauth/requirements-dev.txt` | `pytest ≥8`, `ruff ≥0.6`, plus `httpx` and `fhir.resources 8.3.0` (validates FHIR output in `tests/healthcare`) |
+| Dev / test | `requirements-ci.txt`, `priorauth/requirements-dev.txt` | `pytest ≥8`, `ruff ≥0.6`, `httpx`, `fhir.resources 8.3.0` (validates FHIR output in `tests/healthcare`) |
 
 ### Frontend (`priorauth-ui/package.json`)
 
@@ -143,7 +143,7 @@ docker compose up -d                     # Kafka, TimescaleDB, Airflow, Grafana,
 
 ```bash
 python3.12 -m venv .venv && source .venv/bin/activate
-pip install -r serving/requirements.txt pytest httpx "fhir.resources==8.3.0"
+pip install -r requirements-ci.txt          # minimal pinned test deps (no torch)
 pytest tests/healthcare -q               # FHIR facade, SMART auth, audit log (50 tests)
 ```
 

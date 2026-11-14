@@ -9,14 +9,11 @@ Run (needs .venv-pa -- strands/mcp aren't in the main .venv):
 """
 from __future__ import annotations
 
-import json
 
-from agents.citation import ground_finding
 from agents.eval.run_eval import ScriptedModel, build_environment, build_scenarios
 from agents.mcp_server.auth import Principal
 from agents.mcp_server.tools import LocalGateway
 from agents.reasoning_agent import ask
-from agents.schemas import ClinicalFinding
 from serving.healthcare.audit import verify_chain
 
 
@@ -39,7 +36,7 @@ def main() -> None:
         raw_json = hallu.turns[1][1]
         print(f"\nAgent's RAW drafted JSON (before grounding):\n  {raw_json}")
         finding, dropped = ask(mcp_url, hallu.question, model_factory=lambda: ScriptedModel(hallu.turns))
-        print(f"\nAfter ground_finding():")
+        print("\nAfter ground_finding():")
         print(f"  finding   = {finding.finding!r}")
         print(f"  evidence  = {[e.claim for e in finding.evidence]}")
         print(f"  dropped   = {dropped}")

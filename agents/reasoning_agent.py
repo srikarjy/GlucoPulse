@@ -99,6 +99,42 @@ def _parse(text: str) -> dict:
     return json.loads(m.group(0))
 
 
+def _ids_in(obj, out: set[str]) -> None:
+    """Collects "ResourceType/id" for every FHIR resource in a tool result,
+    plus DocumentReference ids from fhir_search_notes' {"note_id": ...} rows."""
+    if isinstance(obj, dict):
+        if isinstance(obj.get("resourceType"), str) and isinstance(obj.get("id"), str):
+            out.add(f"{obj['resourceType']}/{obj['id']}")
+        if isinstance(obj.get("note_id"), str):
+            out.add(f"DocumentReference/{obj['note_id']}")
+        for v in obj.values():
+            _ids_in(v, out)
+    elif isinstance(obj, list):
+        for v in obj:
+            _ids_in(v, out)
+
+
+def retrieved_resource_ids(messages: list) -> set[str]:
+    """Ground truth for citation checking: what the tools actually returned
+    in this conversation, read from the agent's own message history -- not
+    from anything the model claims."""
+    out: set[str] = set()
+    for msg in messages or []:
+        for block in msg.get("content", []) or []:
+            tr = block.get("toolResult") if isinstance(block, dict) else None
+            if not tr:
+                continue
+            for item in tr.get("content", []) or []:
+                if "json" in item:
+                    _ids_in(item["json"], out)
+                elif "text" in item:
+                    try:
+                        _ids_in(json.loads(item["text"]), out)
+                    except (ValueError, TypeError):
+                        continue
+    return out
+
+
 def _client(mcp_url: str) -> MCPClient:
     tok = issue_token("clinical-agent", subject="clinical-agent", ttl=300)
     return MCPClient(lambda: streamablehttp_client(mcp_url, headers={"Authorization": f"Bearer {tok}"}))
@@ -113,5 +149,6 @@ def ask(mcp_url: str, question: str,
         tools = c.list_tools_sync()
         agent = StrandsAgent(model=model_factory(), system_prompt=SYSTEM_PROMPT, tools=tools, callback_handler=None)
         result = agent(question)
+        retrieved = retrieved_resource_ids(agent.messages)
     raw = ClinicalFinding.model_validate(_parse(str(result)))
-    return ground_finding(raw)
+    return ground_finding(raw, retrieved_ids=retrieved)

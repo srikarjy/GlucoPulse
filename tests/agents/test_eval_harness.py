@@ -29,15 +29,13 @@ def test_eval_harness_metrics():
     # own mechanism, not something this eval can fail -- confirms the mechanism holds.
     assert m["citation_precision_textual"] == 1.0
 
-    # Resource-grounded precision is the HONEST, stricter number: 2 of the 8
-    # "grounded" scenarios cite a resource id that was never actually retrieved
-    # (a model inventing a reference). ground_finding (Phase B) only checks that a
-    # claim is textually cited, not that the cited id is real -- so this is EXPECTED
-    # to be below 1.0, and documents a real, current limitation rather than hiding it.
-    assert 0.0 < m["citation_precision_grounded"] < 1.0
+    # Resource-grounded precision: 2 scenarios script a model citing a resource id
+    # that was never retrieved. ground_finding() rejects those citations against the
+    # ids the tools actually returned, so no surviving sentence cites a fake id.
+    assert m["citation_precision_grounded"] == 1.0
 
-    # Abstention: 4 no-data scenarios must abstain, the other 16 must not -- all 20
-    # are scripted to do the right thing, so this should be perfect.
+    # Abstention: 4 no-data + 2 fabricated-citation scenarios must abstain, the
+    # other 14 must not.
     assert m["abstention_accuracy"] == 1.0
 
     # Quarantine: enforced by the tool itself, independent of what the model says --
@@ -51,3 +49,7 @@ def test_eval_harness_metrics():
     assert kinds.count("hallucination") == 6
     assert kinds.count("no_data") == 4
     assert kinds.count("injection") == 2
+    for r in report["results"]:
+        if r["kind"] == "grounded_fabricated":
+            assert r["abstained"]
+            assert any(f.startswith("rejected_") for f in r["red_flags"])

@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 import sys
 
-from agents.eval.run_eval import build_environment, build_scenarios
+from agents.eval.run_eval import build_environment
 from agents.reasoning_agent import ask, live_model_available
 
 

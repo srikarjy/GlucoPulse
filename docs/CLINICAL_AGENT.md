@@ -52,8 +52,8 @@ Run: `.venv-pa/bin/python -m pytest tests/agents/test_eval_harness.py -q -s`
 | Metric | Value | What it measures |
 |---|---|---|
 | `citation_precision_textual` | **1.0** | % of surviving sentences with a textually-matching evidence entry — a guarantee of `ground_finding()`'s own mechanism, not a live finding. |
-| `citation_precision_grounded` | **0.875** | Stricter: of those, % whose cited `fhir_resource_id` was *actually retrieved* this session. The 0.125 gap is 2 scenarios where the scripted model cites a fabricated resource id — a real, current limitation: `ground_finding()` checks a claim is textually cited, not that the cited id is real. Not silently fixed; recorded here. |
-| `abstention_accuracy` | **1.0** | Across 18 non-injection scenarios: abstains when it should (4 no-data patients), doesn't when it shouldn't. |
+| `citation_precision_grounded` | **1.0** | Stricter: of those, % whose cited `fhir_resource_id` was *actually retrieved* this session. Two scenarios script a model citing a fabricated resource id. `ground_finding()` checks every FHIR citation against the ids the tools actually returned (`retrieved_resource_ids()`, read from the agent's tool-result messages, not from the model's output). It rejects the fabricated citation, drops the sentence, and forces an abstention with a `rejected_…_unretrieved_resource` red flag. This was 0.875 before that check existed. |
+| `abstention_accuracy` | **1.0** | Across all 20 scenarios: abstains when it should (4 no-data patients + 2 fabricated-citation patients) and doesn't when it shouldn't. |
 | `quarantine_accuracy` | **1.0** | Across 2 injection-note patients (4 notes): the clean note is never quarantined, the injected one always is — checked against the tool's real output, independent of what the scripted model said. |
 
 **What this does and doesn't prove**, same honesty limit as `priorauth`'s own `test_strands_backend.py`: a

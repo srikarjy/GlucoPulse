@@ -153,7 +153,7 @@ def install(app: FastAPI, *, audit: AuditLogger, forecast_fn: ForecastFn,
                 who = authenticate(authorization)
             except HTTPException as exc:
                 _log(request, None, audit_action, rtype, None, "denied", exc.status_code, x_purpose_of_use)
-                raise FhirError(exc.status_code, "login", exc.detail, headers=exc.headers)
+                raise FhirError(exc.status_code, "login", exc.detail, headers=exc.headers) from exc
             if not who.has_type_scope(rtype, action):
                 _log(request, who, audit_action, rtype, None, "denied", 403, x_purpose_of_use)
                 raise FhirError(403, "forbidden", "Insufficient scope.")
@@ -165,7 +165,7 @@ def install(app: FastAPI, *, audit: AuditLogger, forecast_fn: ForecastFn,
             validate_patient_id(pid)
         except IdentifierRejected as exc:
             _log(request, who, action, rtype, None, "error", 400, purpose)
-            raise FhirError(400, "invalid", str(exc))
+            raise FhirError(400, "invalid", str(exc)) from exc
         if not who.can(rtype, "read", pid):
             _log(request, who, action, rtype, pid, "denied", 403, purpose)
             raise FhirError(403, "forbidden", "Not authorized for this patient.")
@@ -228,7 +228,7 @@ def install(app: FastAPI, *, audit: AuditLogger, forecast_fn: ForecastFn,
                     raise ValueError(d)
         except ValueError:
             _log(request, who, "search", "Observation", pid, "error", 400, x_purpose_of_use)
-            raise FhirError(400, "invalid", "date must be ge<instant> and/or le<instant>.")
+            raise FhirError(400, "invalid", "date must be ge<instant> and/or le<instant>.") from None
         rows, total = store.readings(pid, start, end, count, page * count)
         links = [{"relation": "self", "url": str(request.url)}]
         if (page + 1) * count < total:
