@@ -1,10 +1,10 @@
 numpy==1.26.4
 pandas==2.2.3
-onnxruntime==1.19.2
-fastapi==0.115.4
-uvicorn==0.32.0
-torch==2.4.1
-pytorch-lightning==2.4.0
+onnxruntime==1.31.1
+fastapi==0.162.4
+uvicorn==0.54.0
+torch==2.15.0
+pytorch-lightning==2.6.6
 pytorch-forecasting==1.1.1
-pyjwt[crypto]==2.9.0
-psycopg2-binary==2.9.9
+pyjwt[crypto]==2.15.1
+psycopg2-binary==2.9.13
