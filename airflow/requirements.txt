@@ -1,2 +1,2 @@
-pyspark==3.5.1
+pyspark==4.3.0
 psycopg2-binary==2.9.13
