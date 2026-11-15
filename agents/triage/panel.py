@@ -27,6 +27,7 @@ from agents.mcp_server.auth import ROLE_SCOPES, Principal
 from agents.mcp_server.tools import LocalGateway, ToolBox
 from agents.reasoning_agent import _parse
 from agents.triage.grounding import ground_claims, ground_free_text, resources_in
+from agents.triage.guards import ToolBudget, leak_issues
 from agents.triage.provider import CaseProvider
 from agents.triage.rules import rule_level
 from agents.triage.schemas import ORDER, Assessment, Claim, Level, ScenarioRow, TriageReport, higher
@@ -81,7 +82,11 @@ class Trace:
 
 
 def _tools(gw: LocalGateway, names: list[str]) -> list:
+    budget = ToolBudget()
+
     def call(name, **kw):
+        if not budget.take():
+            return json.dumps({"error": f"tool budget of {budget.limit} calls exhausted"})
         try:
             return json.dumps(gw.invoke(name, **kw))
         except Exception as exc:          # surfaced to the model as data, never raised through it
@@ -142,6 +147,28 @@ def _gateway(provider: CaseProvider, audit: AuditLogger) -> LocalGateway:
                                        scopes=frozenset(ROLE_SCOPES["clinical-agent"])))
 
 
+def _withhold(dropped: list[dict], patient: str) -> list[dict]:
+    """The removed-claims trail shown to clinicians never repeats removed text or its numbers
+    (an invented low, an identifier or injected instructions would still be read there):
+    only the reason and who said it are kept."""
+    return [{"text": "[withheld]", "reason": d.get("reason", "removed")} | ({"by": d["by"]} if "by" in d else {})
+            for d in dropped]
+
+
+def _guard(claims: list[Claim], texts: list[str], patient: str, by: str):
+    """Drop any claim or free-text line that leaks an identifier or another patient."""
+    kept_c, kept_t, dropped = [], [], []
+    for c in claims:
+        issues = leak_issues(c.text, patient)
+        (dropped.append({"text": "[withheld]", "reason": issues[0].split(":")[0], "by": by}) if issues
+         else kept_c.append(c))
+    for t in texts:
+        issues = leak_issues(t, patient)
+        (dropped.append({"text": "[withheld]", "reason": issues[0].split(":")[0], "by": by}) if issues
+         else kept_t.append(t))
+    return kept_c, kept_t, dropped
+
+
 def _scenario_rows(provider: CaseProvider) -> list[ScenarioRow]:
     rows = []
     for name, s in provider.packet["scenarios"].items():
@@ -153,8 +180,8 @@ def _scenario_rows(provider: CaseProvider) -> list[ScenarioRow]:
 
 
 def _rule(provider: CaseProvider) -> Level:
-    scen = provider.packet["scenarios"]
-    return rule_level(provider.section("glucose_summary"), scen["no_new_meal"], scen.get("history_only"))
+    scen = provider.packet["scenarios"]     # raw packet: the rule is not a tool call and has no budget
+    return rule_level(provider.packet["glucose_summary"], scen["no_new_meal"], scen.get("history_only"))
 
 
 def _record(gw: LocalGateway, report: TriageReport, mode: str) -> None:
@@ -190,7 +217,8 @@ def run_panel(provider: CaseProvider, model_factory: ModelFactory, audit: AuditL
                 continue
             kept, dropped = ground_claims(a.claims, retrieved_all)
             concerns, dropped_c = ground_free_text(a.concerns, retrieved_all)
-            dropped += dropped_c
+            kept, concerns, leaked = _guard(kept, concerns, provider.patient, f"{role}/r{rnd}")
+            dropped = _withhold(dropped + dropped_c, provider.patient) + leaked
             trace.dropped += [{**d, "by": f"{role}/r{rnd}"} for d in dropped]
             current[role] = a.model_copy(update={"claims": kept, "concerns": concerns, "role": role})
             trace.transcript.append({"round": rnd, "role": role, "level": a.level, "confidence": a.confidence,
@@ -208,7 +236,8 @@ def run_panel(provider: CaseProvider, model_factory: ModelFactory, audit: AuditL
                          dissent=["moderator output unparseable; most cautious panelist level used"])
     claims, dropped = ground_claims(mod.claims, retrieved_all)
     dissent, dropped_d = ground_free_text(mod.dissent, retrieved_all)
-    dropped += dropped_d
+    claims, dissent, leaked = _guard(claims, dissent, provider.patient, "moderator")
+    dropped = _withhold(dropped + dropped_d, provider.patient) + leaked
     trace.dropped += [{**d, "by": "moderator"} for d in dropped]
     # The moderator may not quietly overrule the most cautious panelist.
     cautious = max(panel_levels, key=ORDER.get) if panel_levels else mod.level
@@ -223,7 +252,7 @@ def run_panel(provider: CaseProvider, model_factory: ModelFactory, audit: AuditL
     report = TriageReport(patient=provider.patient, as_of=provider.packet["as_of"], level=higher(rule, panel_level),
                           rule_level=rule, panel_level=panel_level, claims=claims, dropped_claims=trace.dropped,
                           dissent=dissent, scenarios=_scenario_rows(provider), panel_incomplete=incomplete,
-                          errors=trace.parse_errors)
+                          errors=trace.parse_errors, quarantined_inputs=sorted(provider.quarantined))
     _record(gw, report, "panel")
     return report, trace
 
@@ -236,12 +265,14 @@ def run_single(provider: CaseProvider, model_factory: ModelFactory, audit: Audit
                         _tools(gw, names), Assessment, trace, "single")
     level: Level = a.level if a else "monitor"
     claims, dropped = ground_claims(a.claims if a else [], retrieved)
+    claims, _, leaked = _guard(claims, [], provider.patient, "single")
+    dropped = _withhold(dropped, provider.patient) + leaked
     rule = _rule(provider)
     report = TriageReport(patient=provider.patient, as_of=provider.packet["as_of"], level=higher(rule, level),
                           rule_level=rule, panel_level=level, claims=claims, dropped_claims=dropped,
                           dissent=[] if a else ["output unparseable; 'monitor' used"],
                           scenarios=_scenario_rows(provider), panel_incomplete=a is None,
-                          errors=trace.parse_errors)
+                          errors=trace.parse_errors, quarantined_inputs=sorted(provider.quarantined))
     _record(gw, report, "single")
     return report, trace
 

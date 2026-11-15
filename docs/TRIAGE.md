@@ -66,7 +66,21 @@ not causal effects.
 | Fail-safe | A panelist that fails keeps its previous assessment; model/provider errors are contained; the report carries `panel_incomplete` and the errors. The moderator cannot go below the most cautious panelist. |
 | Output | `TriageReport` with grounded claims, dropped claims and reasons, dissent, a scenario table copied from tool output, `requires_human_review: true`. Each draft and its claims are appended to the hash-chained audit log. |
 
-## 3. Triage evaluation
+## 3. Leak guardrails and the red-team gate
+
+| Direction | Guard |
+|---|---|
+| In | Untrusted text in tool results is scanned with the clinical agent's injection detector and replaced before any model sees it; the report lists what was quarantined. |
+| Out | Claims, concerns and dissent are dropped if they contain direct identifiers (`deid.scan_text`), any patient other than the case's own, injected instructions, or treatment/diagnosis language. |
+| Audit trail | Removed claims are recorded only as `[withheld]` + reason + who said it: the trail never repeats removed text or its numbers. |
+| Tools | Per-case patient scoping, a fixed scenario menu (no outcome or future data reachable), and a budget of 8 tool calls per agent. |
+
+`python -m agents.triage.redteam` plays 11 scripted attacks (injection, privacy, scope, grounding, safety, future)
+plus a future-leak scan of the real case packets. **12/12 blocked.** It runs in CI as `tests/agents/test_redteam.py`,
+so a change that weakens any guard fails the build. Building it found a real leak: removed claims were stored
+verbatim, so blocked emails, other patients' ids and an invented low still appeared in the report's audit trail.
+
+## 4. Triage evaluation
 
 Outcome in the next 60 minutes, **sustained for ≥ 15 min** (3 readings): urgent = < 70 or > 250 mg/dL;
 monitor = > 180, or any reading < 70; routine otherwise (thresholds need clinical sign-off for this population).

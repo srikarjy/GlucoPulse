@@ -51,6 +51,7 @@ class TriageReport(BaseModel):
     dissent: list[str]
     scenarios: list[ScenarioRow]
     panel_incomplete: bool = False    # a panelist or the moderator failed; the clinician must see this
+    quarantined_inputs: list[str] = Field(default_factory=list)   # untrusted text replaced before models saw it
     errors: list[str] = Field(default_factory=list)
     requires_human_review: bool = True
     disclaimer: str = ("Clinical decision support from model-based forecasts on research data; "
