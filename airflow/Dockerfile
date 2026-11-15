@@ -4,7 +4,7 @@
 # container rather than launching a separate job container, to avoid taking
 # on docker-in-docker (mounting the host docker socket) for a demo-scale
 # pipeline that doesn't need it.
-FROM apache/airflow:2.9.3-python3.11
+FROM apache/airflow:3.4.0-python3.11
 
 USER root
 RUN apt-get update && apt-get install -y --no-install-recommends \
