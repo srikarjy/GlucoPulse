@@ -5,9 +5,9 @@ name: glucopulse-ci
 on:
   push:
     branches: [main]
-    paths: ["agents/**", "serving/**", "ehr/**", "sources/**", "tests/healthcare/**", "tests/agents/**", "tests/sources/**", "requirements-ci.txt", ".github/workflows/glucopulse-ci.yml"]
+    paths: ["agents/**", "serving/**", "ehr/**", "sources/**", "model/cgmacros/**", "tests/healthcare/**", "tests/agents/**", "tests/sources/**", "requirements-ci.txt", ".github/workflows/glucopulse-ci.yml"]
   pull_request:
-    paths: ["agents/**", "serving/**", "ehr/**", "sources/**", "tests/healthcare/**", "tests/agents/**", "tests/sources/**", "requirements-ci.txt", ".github/workflows/glucopulse-ci.yml"]
+    paths: ["agents/**", "serving/**", "ehr/**", "sources/**", "model/cgmacros/**", "tests/healthcare/**", "tests/agents/**", "tests/sources/**", "requirements-ci.txt", ".github/workflows/glucopulse-ci.yml"]
 permissions: { contents: read }
 concurrency: { group: "glucopulse-${{ github.ref }}", cancel-in-progress: true }
 
@@ -20,7 +20,7 @@ jobs:
         with: { python-version: "3.12" }
       - run: pip install "ruff>=0.6"
       # Correctness rules only (pyflakes, syntax errors, bugbear).
-      - run: ruff check --select F,E9,B --ignore B008,B905 --target-version py312 agents serving/healthcare ehr sources tests/healthcare tests/agents tests/sources
+      - run: ruff check --select F,E9,B --ignore B008,B905 --target-version py312 agents serving/healthcare ehr sources model/cgmacros tests/healthcare tests/agents tests/sources tests/model_cgmacros
 
   healthcare:
     runs-on: ubuntu-latest

@@ -27,7 +27,7 @@ AUDIENCE = "clinical-agent-mcp"
 
 ROLE_SCOPES: dict[str, set[str]] = {
     # Deliberately excludes "review:decide": the agent drafts, it never decides.
-    "clinical-agent": {"fhir:read", "audit:write"},
+    "clinical-agent": {"fhir:read", "audit:write", "triage:read"},
     # Deliberately excludes "fhir:read": a reviewer judges a finding that's
     # already been drafted and handed to them -- they don't need, and
     # shouldn't be routed around the agent to, direct FHIR access via this

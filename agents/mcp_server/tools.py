@@ -49,8 +49,9 @@ class ToolBox:
     facade itself uses, if the caller wants one continuous chain; a fresh
     one is fine too (it's append-only either way)."""
 
-    def __init__(self, fhir: EhrClient, audit: AuditLogger):
+    def __init__(self, fhir: Optional[EhrClient], audit: AuditLogger, triage: Any = None):
         self.fhir, self.audit = fhir, audit
+        self.triage = triage   # agents.triage.provider.CaseProvider for triage sessions, else None
         self._idempotency: dict[tuple, Any] = {}
 
     def invoke(self, name: str, kwargs: dict) -> Any:
@@ -112,6 +113,50 @@ class ToolBox:
              "text": "" if note_id in quarantined else text}
             for note_id, date, text in rows
         ]}
+
+    # ----- triage read tools (one case packet, history only) -------------
+
+    def _case(self, patient: str):
+        if self.triage is None:
+            raise ToolError("no triage case is loaded in this session")
+        try:
+            self.triage.check(patient)
+        except PermissionError as exc:
+            raise ToolError(str(exc)) from exc
+        return self.triage
+
+    @tool("triage:read")
+    def glucose_summary(self, patient: str) -> dict:
+        """CGM summary for the 2 hours before now: current value, 15-minute change,
+        2-hour min/max, reading count. Read-only."""
+        return self._case(patient).section("glucose_summary")
+
+    @tool("triage:read")
+    def lifestyle_summary(self, patient: str) -> dict:
+        """Meals and activity in the 2 hours before now: last meal and its macros,
+        carbs logged, mean heart rate and METs over the last 30 minutes. Read-only."""
+        return self._case(patient).section("lifestyle_summary")
+
+    @tool("triage:read")
+    def data_quality(self, patient: str) -> dict:
+        """How complete and trustworthy the recent data is: expected vs received CGM
+        readings, sensors and logs in use. Read-only."""
+        return self._case(patient).section("data_quality")
+
+    @tool("triage:read")
+    def list_scenarios(self, patient: str) -> dict:
+        """The what-if scenarios that can be forecast for this patient, by name."""
+        return {"scenarios": self._case(patient).menu()}
+
+    @tool("triage:read")
+    def forecast_scenarios(self, patient: str, scenarios: list[str]) -> dict:
+        """Model-based glucose forecasts (median and 80% interval at +30 and +60 min)
+        for named what-if scenarios, e.g. ["as_planned", "meal_60g_now"]. Each result
+        has a resourceType/id to cite. Associations, not causal estimates or advice."""
+        try:
+            return {"scenarios": self._case(patient).scenarios(list(scenarios))}
+        except KeyError as exc:
+            raise ToolError(str(exc)) from exc
 
     # ----- write tool (audit log only -- never the EHR) -------------------
 
