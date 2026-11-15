@@ -104,6 +104,45 @@ def observation_from_reading(pseudonym: str, ts: datetime, glucose_mgdl: float) 
     }
 
 
+_CATEGORY_DISPLAY = {"laboratory": "Laboratory", "vital-signs": "Vital Signs", "activity": "Activity",
+                     "social-history": "Social History", "therapy": "Therapy"}
+
+
+def observation_from_measurement(m: Any) -> dict:
+    """FHIR R4 Observation for a normalized multi-source measurement (sources.model.Measurement).
+
+    The id includes kind and device, so two sensors reporting at the same instant
+    (e.g. Dexcom and Libre) never collide. `observation_from_reading` above is left
+    untouched so the ids the live facade already serves do not change.
+    """
+    from sources.model import KINDS  # lazy: hosted images ship serving/healthcare without sources/
+
+    spec = KINDS[m.kind]
+    obs: dict[str, Any] = {
+        "resourceType": "Observation",
+        "id": det_id("obs", m.patient, m.kind.value, m.device, iso(m.ts)),
+        "meta": {"source": f"urn:glucopulse:source:{m.source}"},
+        "status": "final",
+        "category": [{"coding": [{"system": OBS_CATEGORY, "code": spec.category,
+                                  "display": _CATEGORY_DISPLAY[spec.category]}]}],
+        "code": {"coding": [{"system": spec.system, "code": spec.code, "display": spec.display}]},
+        "subject": {"reference": f"Patient/{m.patient}"},
+    }
+    if spec.period:
+        obs["effectivePeriod"] = {"start": iso(m.ts), "end": iso(m.end)}
+    else:
+        obs["effectiveDateTime"] = iso(m.ts)
+    if spec.value_type == "code":
+        display = dict(spec.codes)[m.value]
+        obs["valueCodeableConcept"] = {"coding": [{"system": f"{spec.system}:{spec.code}", "code": m.value,
+                                                   "display": display}], "text": display}
+    else:
+        obs["valueQuantity"] = {"value": round(float(m.value), 3), "unit": spec.unit, "system": UCUM,
+                                "code": spec.unit}
+    obs["device"] = {"display": m.device}
+    return obs
+
+
 def document_reference_from_note(pseudonym: str, ts: datetime, note_id: str, text: str) -> dict:
     """Clinical note as a FHIR DocumentReference. Text travels base64 in
     `content[].attachment.data`, the standard FHIR way to carry inline

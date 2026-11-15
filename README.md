@@ -171,11 +171,13 @@ spark/  dags/              PySpark features, Airflow orchestration
 model/                     TFT training, evaluation, baseline, ONNX export, results
 serving/                   FastAPI /predict + serving/healthcare (FHIR R4, SMART auth, audit log)
 ehr/                       EHR <-> GlucoPulse FHIR round trip
+sources/                   Multi-source ingestion: Fitbit, Apple Health, CGMacros, any app via TOML mapping
+                           -> typed records + FHIR, with a quarantine report (docs/SOURCES.md)
 agents/                    Clinical Reasoning Agent (MCP tools, citation grounding, quarantine)
 priorauth/                 Prior-authorization agent platform (see docs/priorauth/)
 hf_space/  hf_space_agent/ Hosted demos
 monitoring/grafana/        Dashboards
-docs/                      FHIR.md, HIPAA_MAPPING.md, CLINICAL_AGENT.md, QUESTIONS.md
+docs/                      FHIR.md, HIPAA_MAPPING.md, CLINICAL_AGENT.md, SOURCES.md, QUESTIONS.md
 ```
 
 ---

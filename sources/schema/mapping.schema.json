@@ -1,0 +1,198 @@
+{
+  "$defs": {
+    "FieldSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "column": {
+          "description": "CSV header, or dotted path inside a JSON record",
+          "minLength": 1,
+          "title": "Column",
+          "type": "string"
+        },
+        "device": {
+          "default": "app",
+          "description": "stream id; free text is not allowed (privacy)",
+          "pattern": "^[a-z0-9][a-z0-9-]{0,47}$",
+          "title": "Device",
+          "type": "string"
+        },
+        "end_column": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "end time column, required for period kinds",
+          "title": "End Column"
+        },
+        "end_format": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "strptime format for end_column when it differs from the start format; a time-only format takes the start's date (next day if earlier)",
+          "title": "End Format"
+        },
+        "kind": {
+          "$ref": "#/$defs/Kind"
+        },
+        "unit": {
+          "default": "",
+          "description": "source unit for quantity kinds; empty for code kinds",
+          "title": "Unit",
+          "type": "string"
+        },
+        "values": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "source label -> allowed code (code kinds)",
+          "title": "Values",
+          "type": "object"
+        }
+      },
+      "required": [
+        "column",
+        "kind"
+      ],
+      "title": "FieldSpec",
+      "type": "object"
+    },
+    "Kind": {
+      "enum": [
+        "glucose_cgm",
+        "glucose_blood",
+        "heart_rate",
+        "hrv_sdnn",
+        "spo2",
+        "respiratory_rate",
+        "bp_systolic",
+        "bp_diastolic",
+        "body_weight",
+        "steps",
+        "active_calories",
+        "mets",
+        "activity_intensity",
+        "sleep_stage",
+        "insulin_bolus",
+        "insulin_basal",
+        "meal_type",
+        "meal_calories",
+        "meal_carbs",
+        "meal_protein",
+        "meal_fat",
+        "meal_fiber",
+        "meal_sugar",
+        "meal_portion_eaten"
+      ],
+      "title": "Kind",
+      "type": "string"
+    },
+    "TimeSpec": {
+      "additionalProperties": false,
+      "properties": {
+        "columns": {
+          "description": "column(s) joined with a single space before parsing",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Columns",
+          "type": "array"
+        },
+        "epoch": {
+          "anyOf": [
+            {
+              "enum": [
+                "seconds",
+                "milliseconds"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "numeric Unix time (UTC)",
+          "title": "Epoch"
+        },
+        "format": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "strptime format; include %z if the text carries an offset",
+          "title": "Format"
+        }
+      },
+      "required": [
+        "columns"
+      ],
+      "title": "TimeSpec",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "fields": {
+      "items": {
+        "$ref": "#/$defs/FieldSpec"
+      },
+      "minItems": 1,
+      "title": "Fields",
+      "type": "array"
+    },
+    "format": {
+      "enum": [
+        "csv",
+        "json"
+      ],
+      "title": "Format",
+      "type": "string"
+    },
+    "name": {
+      "pattern": "^[a-z0-9][a-z0-9-]{0,47}$",
+      "title": "Name",
+      "type": "string"
+    },
+    "records": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "JSON only: dotted path to the list of records",
+      "title": "Records"
+    },
+    "time": {
+      "$ref": "#/$defs/TimeSpec"
+    }
+  },
+  "required": [
+    "name",
+    "format",
+    "time",
+    "fields"
+  ],
+  "title": "MappingSpec",
+  "type": "object"
+}

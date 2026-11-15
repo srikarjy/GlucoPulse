@@ -1,0 +1,125 @@
+{
+  "$defs": {
+    "Kind": {
+      "enum": [
+        "glucose_cgm",
+        "glucose_blood",
+        "heart_rate",
+        "hrv_sdnn",
+        "spo2",
+        "respiratory_rate",
+        "bp_systolic",
+        "bp_diastolic",
+        "body_weight",
+        "steps",
+        "active_calories",
+        "mets",
+        "activity_intensity",
+        "sleep_stage",
+        "insulin_bolus",
+        "insulin_basal",
+        "meal_type",
+        "meal_calories",
+        "meal_carbs",
+        "meal_protein",
+        "meal_fat",
+        "meal_fiber",
+        "meal_sugar",
+        "meal_portion_eaten"
+      ],
+      "title": "Kind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "device": {
+      "title": "Device",
+      "type": "string"
+    },
+    "end": {
+      "anyOf": [
+        {
+          "format": "date-time",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "End"
+    },
+    "kind": {
+      "$ref": "#/$defs/Kind"
+    },
+    "patient": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$",
+      "title": "Patient",
+      "type": "string"
+    },
+    "raw_ref": {
+      "title": "Raw Ref",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "1",
+      "default": "1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source": {
+      "title": "Source",
+      "type": "string"
+    },
+    "ts": {
+      "format": "date-time",
+      "title": "Ts",
+      "type": "string"
+    },
+    "unit": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "canonical UCUM unit for quantity kinds, null for code kinds",
+      "title": "Unit"
+    },
+    "value": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "string"
+        }
+      ],
+      "title": "Value"
+    },
+    "value_type": {
+      "enum": [
+        "quantity",
+        "code"
+      ],
+      "title": "Value Type",
+      "type": "string"
+    }
+  },
+  "required": [
+    "patient",
+    "kind",
+    "value_type",
+    "value",
+    "ts",
+    "source",
+    "device",
+    "raw_ref"
+  ],
+  "title": "MeasurementRecord",
+  "type": "object"
+}

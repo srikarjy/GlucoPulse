@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<HealthData locale="en_US">
+ <Record type="HKQuantityTypeIdentifierOxygenSaturation" sourceName="Apple Watch" unit="%" startDate="2024-01-15 03:00:00 -0500" endDate="2024-01-15 03:00:00 -0500" value="0.97"/>
+ <Record type="HKQuantityTypeIdentifierHeartRateVariabilitySDNN" sourceName="Apple Watch" unit="ms" startDate="2024-01-15 03:05:00 -0500" endDate="2024-01-15 03:06:00 -0500" value="48.2"/>
+ <Record type="HKQuantityTypeIdentifierRespiratoryRate" sourceName="Apple Watch" unit="count/min" startDate="2024-01-15 03:10:00 -0500" endDate="2024-01-15 03:10:00 -0500" value="14"/>
+ <Correlation type="HKCorrelationTypeIdentifierBloodPressure" sourceName="Omron" startDate="2024-01-15 08:00:00 -0500" endDate="2024-01-15 08:00:00 -0500">
+  <Record type="HKQuantityTypeIdentifierBloodPressureSystolic" sourceName="Omron" unit="mmHg" startDate="2024-01-15 08:00:00 -0500" endDate="2024-01-15 08:00:00 -0500" value="121"/>
+  <Record type="HKQuantityTypeIdentifierBloodPressureDiastolic" sourceName="Omron" unit="mmHg" startDate="2024-01-15 08:00:00 -0500" endDate="2024-01-15 08:00:00 -0500" value="79"/>
+ </Correlation>
+ <Record type="HKQuantityTypeIdentifierInsulinDelivery" sourceName="Omnipod 5" unit="IU" startDate="2024-01-15 12:00:00 -0500" endDate="2024-01-15 12:00:00 -0500" value="4.5">
+  <MetadataEntry key="HKInsulinDeliveryReason" value="2"/>
+ </Record>
+ <Record type="HKQuantityTypeIdentifierInsulinDelivery" sourceName="Omnipod 5" unit="IU" startDate="2024-01-15 13:00:00 -0500" endDate="2024-01-15 14:00:00 -0500" value="0.8">
+  <MetadataEntry key="HKInsulinDeliveryReason" value="1"/>
+ </Record>
+ <Record type="HKQuantityTypeIdentifierInsulinDelivery" sourceName="Omnipod 5" unit="IU" startDate="2024-01-15 15:00:00 -0500" endDate="2024-01-15 15:00:00 -0500" value="2.0"/>
+ <Record type="HKCategoryTypeIdentifierSleepAnalysis" sourceName="Apple Watch" startDate="2024-01-15 01:00:00 -0500" endDate="2024-01-15 01:40:00 -0500" value="HKCategoryValueSleepAnalysisAsleepDeep"/>
+</HealthData>

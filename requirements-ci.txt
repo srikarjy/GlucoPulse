@@ -1,4 +1,4 @@
-# Minimal set for tests/healthcare (FHIR facade, SMART auth, audit log, EHR sync).
+# Minimal set for tests/healthcare and tests/sources (FHIR facade, auth, audit, EHR sync, source adapters).
 # Pins match serving/requirements.txt; torch/onnx are not needed by these tests.
 fastapi==0.115.4
 uvicorn==0.32.0
@@ -6,4 +6,6 @@ httpx==0.28.1
 pyjwt[crypto]==2.9.0
 psycopg2-binary==2.9.9
 fhir.resources==8.3.0
+defusedxml==0.7.1      # sources/apple_health.py: untrusted XML
 pytest>=8
+pydantic==2.14.3       # sources/schema.py: committed JSON Schemas are compared byte-for-byte

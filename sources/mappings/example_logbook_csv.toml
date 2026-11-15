@@ -1,0 +1,37 @@
+# Example mapping for a diabetes-logbook style CSV export (date and time in separate
+# columns, glucose in mmol/L, German meal labels). Copy and edit for a real app:
+# only column names, units and labels change, no Python code.
+name = "example-logbook-csv"
+format = "csv"
+
+[time]
+columns = ["Date", "Time"]
+format = "%d.%m.%Y %H:%M"
+
+[[fields]]
+column = "Glucose (mmol/L)"
+kind = "glucose_blood"
+unit = "mmol/L"
+device = "meter"
+
+[[fields]]
+column = "Carbs (g)"
+kind = "meal_carbs"
+unit = "g"
+device = "logbook"
+
+[[fields]]
+column = "Bolus (U)"
+kind = "insulin_bolus"
+unit = "IU"
+device = "pen"
+
+[[fields]]
+column = "Meal"
+kind = "meal_type"
+device = "logbook"
+
+[fields.values]
+"frühstück" = "breakfast"
+"mittagessen" = "lunch"
+"abendessen" = "dinner"

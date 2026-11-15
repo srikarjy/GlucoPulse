@@ -11,3 +11,4 @@ priorauth.db
 *.tfstate*
 .terraform/
 demo.db
+data/cgmacros/
