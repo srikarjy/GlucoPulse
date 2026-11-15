@@ -27,7 +27,7 @@ Measured directly from the downloaded files (not trusted from the paper): **306,
 | **Storage** | TimescaleDB | `time_bucket()`, continuous aggregates, native Grafana integration. |
 | **Batch features** | PySpark | Feature engineering across full patient history is a legitimately distributed workload (even if demo-scale is single-node). |
 | **Orchestration** | Airflow | Retry logic, SLA monitoring, dependency gating — not replaceable by cron. |
-| **Model** | Temporal Fusion Transformer (PyTorch) | AZT1D's covariates map cleanly onto TFT's known-future and past-observed input channels. |
+| **Model** | Temporal Fusion Transformer (PyTorch) | Multi-horizon probabilistic forecasting with past-observed covariates. Today insulin and carbs enter only as past-observed features (time since last bolus/carb); the only known-future inputs are hour and day of week (`model/train.py`), so the model cannot yet answer what-if questions about planned meals or doses. |
 | **Serving** | ONNX + FastAPI | Portable artifact served via REST; decouples inference from the training runtime. |
 | **Observability** | Grafana | Pipeline health + model drift on one surface. |
 

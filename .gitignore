@@ -11,3 +11,6 @@ priorauth.db
 *.tfstate*
 .terraform/
 demo.db
+data/cgmacros/
+model/artifacts/cgmacros/
+lightning_logs/

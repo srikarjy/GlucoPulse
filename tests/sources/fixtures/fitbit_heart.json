@@ -1,0 +1,7 @@
+{"activities-heart": [{"dateTime": "2024-01-15", "value": {"restingHeartRate": 62}}],
+ "activities-heart-intraday": {"dataset": [
+   {"time": "07:00:00", "value": 64},
+   {"time": "07:01:00", "value": 66},
+   {"time": "07:02:00", "value": "abc"},
+   {"value": 70}
+ ], "datasetInterval": 1, "datasetType": "minute"}}

@@ -1,0 +1,209 @@
+{
+  "test_participants": [
+    "cgmacros-010",
+    "cgmacros-011",
+    "cgmacros-019",
+    "cgmacros-022",
+    "cgmacros-026",
+    "cgmacros-031",
+    "cgmacros-041"
+  ],
+  "horizons_min": [
+    30,
+    60
+  ],
+  "variants": {
+    "glucose": {
+      "t+30": {
+        "all": {
+          "rmse": 19.19,
+          "mae": 12.63,
+          "coverage80": 0.78,
+          "n": 19752
+        },
+        "meal_windows": {
+          "rmse": 18.49,
+          "mae": 12.76,
+          "coverage80": 0.768,
+          "n": 3245
+        }
+      },
+      "t+60": {
+        "all": {
+          "rmse": 25.48,
+          "mae": 16.93,
+          "coverage80": 0.819,
+          "n": 19752
+        },
+        "meal_windows": {
+          "rmse": 34.31,
+          "mae": 24.81,
+          "coverage80": 0.724,
+          "n": 3245
+        }
+      }
+    },
+    "fitbit": {
+      "t+30": {
+        "all": {
+          "rmse": 18.83,
+          "mae": 12.31,
+          "coverage80": 0.76,
+          "n": 19752
+        },
+        "meal_windows": {
+          "rmse": 18.24,
+          "mae": 12.47,
+          "coverage80": 0.742,
+          "n": 3245
+        }
+      },
+      "t+60": {
+        "all": {
+          "rmse": 25.45,
+          "mae": 16.89,
+          "coverage80": 0.789,
+          "n": 19752
+        },
+        "meal_windows": {
+          "rmse": 34.22,
+          "mae": 24.77,
+          "coverage80": 0.668,
+          "n": 3245
+        }
+      }
+    },
+    "meals": {
+      "t+30": {
+        "all": {
+          "rmse": 18.0,
+          "mae": 11.82,
+          "coverage80": 0.74,
+          "n": 19752
+        },
+        "meal_windows": {
+          "rmse": 16.99,
+          "mae": 11.63,
+          "coverage80": 0.726,
+          "n": 3245
+        }
+      },
+      "t+60": {
+        "all": {
+          "rmse": 24.21,
+          "mae": 16.09,
+          "coverage80": 0.747,
+          "n": 19752
+        },
+        "meal_windows": {
+          "rmse": 30.21,
+          "mae": 21.99,
+          "coverage80": 0.693,
+          "n": 3245
+        }
+      }
+    },
+    "meals_activity": {
+      "t+30": {
+        "all": {
+          "rmse": 17.62,
+          "mae": 11.58,
+          "coverage80": 0.737,
+          "n": 19752
+        },
+        "meal_windows": {
+          "rmse": 16.38,
+          "mae": 11.27,
+          "coverage80": 0.767,
+          "n": 3245
+        }
+      },
+      "t+60": {
+        "all": {
+          "rmse": 23.07,
+          "mae": 15.27,
+          "coverage80": 0.778,
+          "n": 19752
+        },
+        "meal_windows": {
+          "rmse": 28.49,
+          "mae": 20.7,
+          "coverage80": 0.778,
+          "n": 3245
+        }
+      }
+    }
+  },
+  "probes": {
+    "meals: +60 g carb meal": {
+      "t+30": {
+        "mean_delta": 17.63,
+        "median_delta": 11.72,
+        "share_rising": 0.983
+      },
+      "t+60": {
+        "mean_delta": 33.11,
+        "median_delta": 21.32,
+        "share_rising": 1.0
+      },
+      "windows": 300
+    },
+    "meals_activity: +60 g carb meal": {
+      "t+30": {
+        "mean_delta": 13.2,
+        "median_delta": 12.75,
+        "share_rising": 0.96
+      },
+      "t+60": {
+        "mean_delta": 31.61,
+        "median_delta": 27.9,
+        "share_rising": 0.993
+      },
+      "windows": 300
+    },
+    "meals_activity: 30 min walk (4 METs)": {
+      "t+30": {
+        "mean_delta": -1.62,
+        "median_delta": -1.12,
+        "share_rising": 0.027
+      },
+      "t+60": {
+        "mean_delta": 0.27,
+        "median_delta": 0.2,
+        "share_rising": 0.71
+      },
+      "windows": 300
+    }
+  },
+  "notes": "Held-out participants (CGMacros: healthy, prediabetes and T2D adults, no insulin). Meal and activity inputs are known-future: they assume the plan for the next hour is known. Probe deltas are model-based associations, not causal effects.",
+  "persistence": {
+    "t+30": {
+      "all": {
+        "rmse": 19.53,
+        "mae": 12.66,
+        "coverage80": null,
+        "n": 19752
+      },
+      "meal_windows": {
+        "rmse": 18.82,
+        "mae": 12.68,
+        "coverage80": null,
+        "n": 3245
+      }
+    },
+    "t+60": {
+      "all": {
+        "rmse": 26.24,
+        "mae": 17.14,
+        "coverage80": null,
+        "n": 19752
+      },
+      "meal_windows": {
+        "rmse": 34.91,
+        "mae": 25.04,
+        "coverage80": null,
+        "n": 3245
+      }
+    }
+  }
+}

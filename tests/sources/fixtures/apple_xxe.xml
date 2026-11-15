@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE HealthData [<!ENTITY leak SYSTEM "file:///etc/passwd">]>
+<HealthData locale="en_US">
+ <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="&leak;" unit="count/min" startDate="2024-01-15 10:00:00 -0500" value="72"/>
+</HealthData>

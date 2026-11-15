@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE HealthData [
+<!ELEMENT HealthData (ExportDate,Record*)>
+<!ATTLIST HealthData locale CDATA #REQUIRED>
+<!ELEMENT ExportDate EMPTY>
+<!ATTLIST ExportDate value CDATA #REQUIRED>
+<!ELEMENT Record EMPTY>
+]>
+<HealthData locale="en_US">
+ <ExportDate value="2024-01-16 08:00:00 -0500"/>
+ <Record type="HKQuantityTypeIdentifierBloodGlucose" sourceName="Dexcom G7" unit="mg/dL" startDate="2024-01-15 10:00:00 -0500" endDate="2024-01-15 10:00:00 -0500" value="118"/>
+ <Record type="HKQuantityTypeIdentifierBloodGlucose" sourceName="Contour Next" unit="mmol&lt;180.1558800000541&gt;/L" startDate="2024-01-15 12:00:00 -0500" endDate="2024-01-15 12:00:00 -0500" value="6.2"/>
+ <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Watch" unit="count/min" startDate="2024-01-15 10:00:00 -0500" endDate="2024-01-15 10:00:00 -0500" value="72"/>
+ <Record type="HKQuantityTypeIdentifierStepCount" sourceName="iPhone" unit="count" startDate="2024-01-15 10:00:00 -0500" endDate="2024-01-15 10:05:00 -0500" value="350"/>
+ <Record type="HKQuantityTypeIdentifierBodyMass" sourceName="Scale" unit="lb" startDate="2024-01-15 07:00:00 -0500" endDate="2024-01-15 07:00:00 -0500" value="150"/>
+ <Record type="HKQuantityTypeIdentifierHeartRate" sourceName="Apple Watch" unit="count/min" startDate="not a date" endDate="not a date" value="80"/>
+</HealthData>

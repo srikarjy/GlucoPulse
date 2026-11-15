@@ -1,0 +1,21 @@
+# Example mapping for a wearable app's JSON export: a list of records under
+# data.entries, epoch-second timestamps (UTC), nested fields addressed by dotted paths.
+name = "example-wearable-json"
+format = "json"
+records = "data.entries"
+
+[time]
+columns = ["ts"]
+epoch = "seconds"
+
+[[fields]]
+column = "hr.bpm"
+kind = "heart_rate"
+unit = "/min"
+device = "band"
+
+[[fields]]
+column = "spo2"
+kind = "spo2"
+unit = "fraction"
+device = "band"

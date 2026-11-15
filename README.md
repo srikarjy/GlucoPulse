@@ -69,7 +69,7 @@ Patient-level split: 18 train / 3 validation / 4 test patients, seed 42. The tes
 | **PySpark** only on the batch path | Feature engineering over every patient's full history is a real distributed workload. The hot path isn't. |
 | **Airflow** over cron | Retries, SLAs and data-quality-gated dependencies. A silent 3 a.m. failure corrupts training data. |
 | **TimescaleDB** | `time_bucket()` and continuous aggregates for rolling glucose windows, and Grafana reads it natively. |
-| **TFT** | AZT1D has insulin and carb covariates, which map directly onto TFT's known-future and past-observed inputs. |
+| **TFT** | Multi-horizon forecasts with prediction intervals. Insulin and carbs currently enter as past-observed features (time since last bolus or carb); the only known-future inputs are hour and day of week, so planned-meal what-ifs need a retrained model. |
 | **ONNX + INT8** | Separates the inference runtime from the training stack, so the API ships as one small artifact. |
 | **Patient-level split** | Tests generalization to *new patients*, the realistic deployment case, not just to unseen weeks. |
 
@@ -171,11 +171,15 @@ spark/  dags/              PySpark features, Airflow orchestration
 model/                     TFT training, evaluation, baseline, ONNX export, results
 serving/                   FastAPI /predict + serving/healthcare (FHIR R4, SMART auth, audit log)
 ehr/                       EHR <-> GlucoPulse FHIR round trip
+sources/                   Multi-source ingestion: Fitbit, Apple Health, CGMacros, any app via TOML mapping
+                           -> typed records + FHIR, with a quarantine report (docs/SOURCES.md)
 agents/                    Clinical Reasoning Agent (MCP tools, citation grounding, quarantine)
+agents/triage/             Triage panel: 4 agents + moderator over what-if forecasts, grounded, rule floor (docs/TRIAGE.md)
+model/cgmacros/            CGMacros forecaster with meals as known-future inputs, ablation, what-if engine
 priorauth/                 Prior-authorization agent platform (see docs/priorauth/)
 hf_space/  hf_space_agent/ Hosted demos
 monitoring/grafana/        Dashboards
-docs/                      FHIR.md, HIPAA_MAPPING.md, CLINICAL_AGENT.md, QUESTIONS.md
+docs/                      FHIR.md, HIPAA_MAPPING.md, CLINICAL_AGENT.md, SOURCES.md, TRIAGE.md, QUESTIONS.md
 ```
 
 ---
