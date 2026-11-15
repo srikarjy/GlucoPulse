@@ -55,7 +55,7 @@ def reject_direct_identifiers(value: str, field_name: str = "value") -> str:
 
 
 def validate_patient_id(patient_id: str) -> str:
-    if not _PATIENT_ID.match(patient_id):
+    if not _PATIENT_ID.fullmatch(patient_id):   # fullmatch: "$" alone lets a trailing "\n" through
         raise IdentifierRejected("patient id must be 1-64 chars of [A-Za-z0-9._-]")
     reject_direct_identifiers(patient_id, "patient id")
     return patient_id
