@@ -399,6 +399,40 @@ By construction a bigger meal never forecasts lower, and a meal never forecasts 
   - The gain was fitted on residuals from people the forecaster trained on.
   - The p10-p90 band is shifted with the median. Its width is not modelled.
 
+**Verification after the run.** These checks were made after the run, so they are not part of the pre-registration.
+
+Checks that passed:
+- A refit from the cache reproduces k and every RMSE.
+- No test person is in the fitting set.
+- For all 1,553 windows, these were recomputed from the raw grid and matched: the future glucose, the meal carbs (each
+  meal at decoder step 1), and the gain features (from history ending at `as_of`).
+- The meal and no-meal arms differ in 98% of windows.
+- On all 327 held-out windows, forecasts never decrease as carbs go from 0 to 120 g.
+- The hybrid beats D for 8 of the 9 new people. The exception is cgmacros-009: 45.8 vs 36.1.
+
+What the comparison is worth: T+60 RMSE on the 9 new people for simpler baselines.
+
+| Method | T+60 RMSE |
+|---|---|
+| Persistence | 49.0 |
+| No-meal forecast | 48.0 |
+| D (forecaster with the meal) | 39.9 |
+| No-meal + the training people's average post-meal residual (ignores meal size) | 38.3 |
+| No-meal + a straight-line rise per gram | 37.5 |
+| No-meal + Hovorka curve, one constant gain | 37.5 |
+| **Hybrid (Hovorka curve, learned gain)** | **35.7** |
+
+So:
+- **D is a weak bar on these windows.** Adding the average post-meal rise to the no-meal forecast, ignoring the meal
+  size, already beats it.
+- **At T+60 the Hovorka shape adds no accuracy over a straight line.** Both predict about +26 mg/dL on average at 60
+  min; the shape only differs before then.
+- **The learned gain adds about 1.8 mg/dL.**
+
+The case for the hybrid is therefore its consistency (bigger meals always forecast higher, and it is built on a
+published absorption curve), plus a modest accuracy gain from the gain model. It is not that the physiology beats data
+at 60 min. That matches the Apple paper, where the physiological structure paid off mainly at 2-6 h.
+
 **Status:** available, not the default. `python -m model.cgmacros.cases --meal-model hybrid` builds packets whose meal
 what-ifs come from the hybrid (`scenarios.HybridMeal`). The default stays the forecaster, because the level-setter
 (§6) takes the meal scenarios as features (`agents/triage/features.py`). Switching would change triage levels and
