@@ -43,10 +43,10 @@ from agents.triage.rules import rule_level
 from model.cgmacros.cases import OUT, candidate_moments, outcome_label, summaries
 from model.cgmacros.dataset import ROOT, build_grid
 from model.cgmacros.scenarios import MENU, ScenarioForecaster, scenario_resource
-from model.cgmacros.splits import split_participants
+from model.cgmacros.splits import SCHEME, split_participants
 from model.cgmacros.train import ENCODER, HORIZON
 
-POOL = OUT / "ceiling_pool.csv"
+POOL = OUT / ("ceiling_pool.csv" if SCHEME == "primary" else f"ceiling_pool_{SCHEME}.csv")
 RESULTS = ROOT / "model" / "results" / "cgmacros_ceiling.json"
 O = {"routine": 0, "monitor": 1, "urgent": 2}
 def build_pool() -> pd.DataFrame:

@@ -26,9 +26,9 @@ from pytorch_forecasting.data import EncoderNormalizer
 from pytorch_forecasting.metrics import QuantileLoss
 
 from model.cgmacros.dataset import build_grid
-from model.cgmacros.splits import split_participants
+from model.cgmacros.splits import SCHEME, split_participants
 
-ART = Path(__file__).resolve().parents[1] / "artifacts" / "cgmacros"
+ART = Path(__file__).resolve().parents[1] / "artifacts" / ("cgmacros" if SCHEME == "primary" else f"cgmacros_{SCHEME}")
 ENCODER, MIN_ENCODER, HORIZON = 24, 6, 12           # 2 h history, >= 30 min, 60 min ahead (5-min steps)
 CALENDAR = ["hour", "dow"]
 MEAL = ["carbs", "protein", "fat", "fiber"]
