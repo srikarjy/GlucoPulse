@@ -220,8 +220,94 @@ def t_hgb(train, dev):
     return (med, *_band(train, med, _hgb, (S30, S60)))
 
 
+PERSON = ["p_mean", "p_sd", "p_days", "p_meal_rise", "p_n_meals", "p_resid60"]
+LONG = ["m6h", "sd6h", "m24h", "sd24h", "now_minus_m24h"]
+
+
+def extra_features(df: pd.DataFrame) -> pd.DataFrame:
+    """Past-only extras per (participant, time_idx):
+    LONG    mean/sd of glucose over the previous 6 h and 24 h (readings present only);
+    PERSON  the person's own history before as_of: mean/sd of all earlier glucose, days observed, mean 60-min rise
+            after earlier logged meals (only meals whose hour ended by as_of), count of those meals, and the mean
+            60-min change after earlier moments (a personal drift term; only hours that ended by as_of)."""
+    grid = build_grid()
+    out = []
+    for p, w in df.groupby("participant", sort=False):
+        g = grid[grid.participant == p].set_index("time_idx").sort_index()
+        full = g.reindex(range(int(g.index.min()), int(g.index.max()) + 1))
+        s = full["glucose"]
+        e = pd.DataFrame(index=full.index)
+        e["m6h"] = s.rolling(72, min_periods=12).mean()
+        e["sd6h"] = s.rolling(72, min_periods=12).std()
+        e["m24h"] = s.rolling(288, min_periods=36).mean()
+        e["sd24h"] = s.rolling(288, min_periods=36).std()
+        e["now_minus_m24h"] = s - e["m24h"]
+        e["p_mean"] = s.expanding(min_periods=1).mean()
+        e["p_sd"] = s.expanding(min_periods=2).std()
+        e["p_days"] = s.notna().cumsum() / 288.0
+        fut60 = s.shift(-HORIZON)                                   # glucose 60 min later, known 60 min later
+        change = (fut60 - s).shift(HORIZON)                         # aligned to when it becomes known
+        e["p_resid60"] = change.expanding(min_periods=12).mean()
+        maxnext = s[::-1].rolling(HORIZON, min_periods=6).max()[::-1].shift(-1)
+        meal = full["carbs"].fillna(0) > 0
+        rise = (maxnext - s).where(meal).shift(HORIZON)             # meal rise, known once its hour has passed
+        e["p_meal_rise"] = rise.expanding(min_periods=1).mean()
+        e["p_n_meals"] = rise.notna().cumsum()
+        out.append(e.loc[w["time_idx"].to_numpy()].set_index(w.index))
+    return pd.concat(out).loc[df.index]
+
+
+def _with(train, dev, cols):
+    tr, dv = train.copy(), dev.copy()
+    for d in (tr, dv):
+        d[cols] = extra_features(d)[cols].to_numpy()
+    return tr, dv
+
+
+def _hgb_cols(cols):
+    def trial(train, dev):
+        global FEATURES
+        base = FEATURES
+        tr, dv = _with(train, dev, cols)
+        FEATURES = base + cols
+        try:
+            med = _per_step(_hgb, tr, dv, (S30, S60))
+            return (med, *_band(tr, med, _hgb, (S30, S60)))
+        finally:
+            FEATURES = base
+    return trial
+
+
 TRIALS = {"persistence": t_persistence, "tft_A": t_tft_A, "tft_D_oracle_meals": t_tft_D_oracle_meals,
-          "ridge": t_ridge, "hgb": t_hgb}
+          "ridge": t_ridge, "hgb": t_hgb, "hgb_long": _hgb_cols(LONG), "hgb_person": _hgb_cols(PERSON),
+          "hgb_long_person": _hgb_cols(LONG + PERSON)}
+
+
+def _hgb_big(X, y, Xd):
+    from sklearn.ensemble import HistGradientBoostingRegressor
+    return HistGradientBoostingRegressor(max_iter=800, learning_rate=0.03, max_leaf_nodes=63, min_samples_leaf=50,
+                                         l2_regularization=1.0, random_state=0).fit(X, y).predict(Xd)
+
+
+def t_hgb_big_long_person(train, dev):
+    global FEATURES
+    base = FEATURES
+    tr, dv = _with(train, dev, LONG + PERSON)
+    FEATURES = base + LONG + PERSON
+    try:
+        med = _per_step(_hgb_big, tr, dv, (S30, S60))
+        return (med, *_band(tr, med, _hgb_big, (S30, S60)))
+    finally:
+        FEATURES = base
+
+
+def t_blend_hgb_lp_tftA(train, dev):
+    med, lo, hi = TRIALS["hgb_long_person"](train, dev)
+    a = stack(dev.glucose_med)
+    return 0.7 * med + 0.3 * a, lo, hi                 # fixed 70/30 weights, not tuned on dev
+
+
+TRIALS.update({"hgb_big_long_person": t_hgb_big_long_person, "blend_hgb_lp_tftA": t_blend_hgb_lp_tftA})
 
 
 def run_trial(name: str, note: str = "") -> dict:
