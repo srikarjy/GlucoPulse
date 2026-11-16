@@ -232,6 +232,40 @@ Read with care:
 `level_source="levelsetter"`. It is **not** the default: fewer misses overall for ~2 points more alarms is a trade
 for a clinician to accept. In that mode the LLM explains and cannot raise the level.
 
+## 8. Event model: predict the urgent event directly (not confirmed)
+
+Why: on the 98 eval cases the forecaster's 60-min median never continued a rise (all 20 cases rising >= 20 mg/dL per
+15 min had a median at or below the current reading), and the rule calls urgent only when that median crosses 250.
+The label asks whether the path crosses at any time, which the median understates by construction.
+
+`python -m model.cgmacros.event` trains a gradient-boosted classifier on the urgent event itself, from glucose history
+only (levels, 5-60 min changes, slope, acceleration, 2-h range, meals, heart rate), on the forecaster's 31 training
+people. The threshold comes from their out-of-fold predictions (target specificity 0.985), never from test labels.
+Policy: urgent if the rule says urgent or the event model fires; otherwise the rule's level. Comparator fixed in
+advance: urgent if the current reading + 4 x the 15-min change is outside 70-250. The protocol was committed
+(`e4c1958`) before any output for the test people was computed.
+
+| Urgent hours (rule floor kept) | Rule recall | Event recall | Gain, 95% CI by person | False alarms rule -> event | Trend recall / false alarms |
+|---|---|---|---|---|---|
+| **9 new people (pre-registered)**, 88 urgent from 6 people | .705 | .739 | +3.4 pts [0.0, 10.0] | 1.1% -> 1.9% | .784 / 11.8% |
+| All 14 confirm held-out people (secondary), 277 urgent | .650 | .726 | +7.6 pts [1.6, 9.7] | 1.5% -> 2.5% | .765 / 12.7% |
+| Primary held-out 12 (exploratory), 256 urgent | .625 | .723 | +9.8 pts [6.3, 17.2] | 1.5% -> 2.3% | .777 / 13.4% |
+
+- **Pre-registered result: not confirmed.** Criterion 2 (false alarms at most 2 points higher) passed; criterion 1
+  failed by the narrowest margin (interval lower bound exactly 0). The power check before the run said a gain of
+  about 15 points was needed; the observed gain on the 9 is 3.4.
+- **Direction is consistent:** every population shows a gain of 3-10 points for about 1 extra point of false alarms.
+  On its own the event model ranks well (test AUROC .96-.98), but much of what it catches the rule already catches.
+- **The trend comparator is not usable:** a little more recall for ten times the false alarms (12-13%).
+- **It does not fix the severe misses.** Urgent hours called routine: 7 -> 7 on the 9 new people, 17 -> 17 on all
+  14. Those are mostly spikes from a flat, normal start (likely meals eaten after the moment), which no history-only
+  model can see.
+- Hour-of-day features are weak by design: CGMacros timestamps are shifted by the dataset authors.
+
+**Status:** not shipped. The evidence is a small, consistent gain that this dataset is too small to confirm. The
+largest remaining error, a spike from a quiet baseline, needs new information (an upcoming-meal prompt or re-triage
+when a meal is logged), not a better model of the past.
+
 ## Limits
 
 - Population: adults without insulin therapy; nothing here transfers to type 1 diabetes.
