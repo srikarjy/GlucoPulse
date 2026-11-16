@@ -4,8 +4,9 @@
     python -m model.cgmacros.event                            # exploratory: primary train 33 -> primary held-out 12
 
 Why: the rule calls 'urgent' only when the forecaster's MEDIAN crosses 250 (or 70), but the label asks whether the
-path crosses at ANY time in the next hour, and the forecaster's median never continues a rise (all 20 eval cases
-rising >= 20 mg/dL per 15 min had a 60-min median at or below the current reading). This model is trained on the
+path crosses at ANY time in the next hour, and the forecaster's median barely continues a rise (of 20 eval cases
+rising >= 20 mg/dL per 15 min, 14 had a 60-min median at or below the current reading and the other 6 rose by at
+most 16 mg/dL, while their 15-min trend implied +80 or more). This model is trained on the
 event itself, from history only, on the forecaster's TRAINING people (many more people than the 12-person ceiling).
 Forecaster outputs are not features: they are in-sample on the training people.
 
