@@ -548,6 +548,86 @@ wrong direction for a warning system.
   the extremes.
 - **Still untested for triage levels:** that needs new people.
 
+## 13. Spikes: what meal information can and cannot do (dev only, exploratory)
+
+**Question.** Can the forecaster catch more spikes (actual > 250 within the hour)?
+
+**Headroom check first.** Training people, windows that cross 250 by T+60 from <= 250 now:
+
+| Situation | Share |
+|---|---|
+| Meal logged in the next hour (a prompt could help) | 26% |
+| Meal already logged in the 60 min before `as_of` (the model already had it) | 48% |
+| Neither | 28% |
+
+Dev: 20% / 33% / 46%. §8's "unlogged meals after the moment" was therefore only part of the story: many spikes follow
+a meal the model knew about.
+
+**Trials** (protocol written before the first trial; dev 12 only, blend + safety floor in every arm):
+
+| Dev, T+60 | Highs reached by median | by p90 | RMSE, meal next hour | RMSE |
+|---|---|---|---|---|
+| Blend + floor (§12) | 46.4% | 78.2% | 31.0 | 23.66 |
+| + Hovorka curve for meals already eaten | 48.1% | 78.6% | 31.0 | 23.68 |
+| + meal prompt answered every time (upper bound) | 49.8% | 81.4% | **26.2** | 22.60 |
+| + prompt answered half the time | 47.6% | 79.5% | 29.4 | 23.29 |
+
+The meal features are monotone, so more carbs never forecasts lower.
+
+**Result: a negative result.**
+- **What meal information does:** it sharpens the forecast around meals. With a perfectly answered prompt, the error in
+  the meal hour falls from 31.0 to 26.2.
+- **What it doesn't do:** catch many more spikes. Highs reached by the median rose at most 3.4 points.
+- **Why:** a 60-min forecast made before a spike begins cannot see how high it will go.
+- **What works instead:** checking every 5 min. §9's trend alarm warned of about 70% of highs at least 15 min ahead.
+- **Recommendation:** run the forecaster and the alarm every 5 min, rather than adding meal prompts for accuracy.
+
+## 14. External test on 73 new people: more accurate forecasts, but they must not replace the triage forecaster
+
+**Data** (people from two other studies, never used for any choice), read through `sources/external_cgm.py` into the
+same 5-min grid:
+- **BIG IDEAs** (PhysioNet, doi:10.13026/aw6y-fc44, ODC-By): 16 adults, Dexcom G6, food logs.
+- **Hall et al. 2018** (doi:10.1371/journal.pbio.2005143, CC BY): 57 adults including type 2 diabetes, Dexcom G4.
+
+**Gaps and fixes:**
+- Heart rate and METs are resting defaults; Hall has no meals.
+- One adapter fix was needed: BIG IDEAs logs one row per food *item*, so items with the same start time are summed into
+  one meal. Without that, normalization quarantined 3,701 rows.
+
+**Test design.** The protocol (`model/cgmacros/external.py`) was committed in `bd4bcde` before any forecast was made.
+- **Models:** frozen.
+- **Moments:** 18,294, at 30-min steps.
+- **Urgent events:** 819 urgent moments from 48 people, almost all lows. Highs cannot be tested here: there were 3
+  events in all.
+- **Arms:**
+  - Current: rule(TFT D no-meal, TFT A).
+  - New: rule(new forecaster, TFT A).
+
+| 73 people | Urgent recall | Predictive recall (in range now) | Urgent false alarms | T+60 RMSE |
+|---|---|---|---|---|
+| Current rule (D + A) | .615 | .234 | 2.28% | D 19.27 / A 19.23 |
+| **New rule (new + A), pre-registered** | .585 (-3.0 [-4.2, -1.6]) | .173 | 1.79% | **new 17.53** (gain vs A +1.7 [1.3, 2.1]) |
+| *All three slots (exploratory, after the result)* | *.618* | *.238* | *2.29%* | — |
+
+- **Pre-registered result: passed on paper, but not a win.**
+  - Both criteria passed: recall was non-inferior at the -5-point margin, and false alarms did not rise.
+  - Recall nonetheless fell by 3 points, with the interval entirely below 0.
+  - On lows still ahead (the moment is in range now), recall fell from 23.4% to 17.3%.
+  - The new rule traded sensitivity for fewer false alarms. For a warning system, that is the wrong trade.
+- **Why** (exploratory, by slot): the new forecaster's median almost never goes below 70. On its own it catches 3.6%
+  of upcoming lows, against 21.2% for D and 16.1% for A. This is the §12 shrinkage again. Replacing D removed D's
+  catches, and the A slot kept only some of them.
+- **Accuracy holds up externally.**
+  - T+60 RMSE is 17.5 vs 19.2 overall.
+  - The gain held in both datasets: BIG IDEAs +2.6 [2.3, 3.0], Hall +1.2 [0.8, 1.7].
+  - It held for new users with no personal history.
+- **Decision:**
+  - Use the new forecaster for the forecasts people see. It is more accurate, including on new datasets.
+  - Do not let it replace D or A in the urgent decision.
+  - If it is added to the rule, add it as a third slot, which by construction can only add urgent calls. Exploratory
+    numbers above: recall .618, false alarms unchanged, monitor calls +0.6 points. That variant has not been
+    pre-registered.
+
 ## Limits
 
 - Population: adults without insulin therapy; nothing here transfers to type 1 diabetes.
