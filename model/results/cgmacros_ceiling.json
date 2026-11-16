@@ -1,0 +1,991 @@
+{
+ "features": [
+  "gs_current",
+  "gs_change15",
+  "gs_min2h",
+  "gs_max2h",
+  "ls_meal_minutes_ago",
+  "ls_meal_carbs",
+  "ls_carbs_2h",
+  "ls_hr",
+  "ls_hr_frac",
+  "ls_mets",
+  "nnm_30_p10",
+  "nnm_30_p50",
+  "nnm_30_p90",
+  "nnm_60_p10",
+  "nnm_60_p50",
+  "nnm_60_p90",
+  "nnm_lowest_p10_next_60min",
+  "nnm_highest_p90_next_60min",
+  "nnm_lowest_p50_next_60min",
+  "nnm_highest_p50_next_60min",
+  "nnm_minutes_until_p50_below_70",
+  "nnm_minutes_until_p50_above_180",
+  "m30_30_p10",
+  "m30_30_p50",
+  "m30_30_p90",
+  "m30_60_p10",
+  "m30_60_p50",
+  "m30_60_p90",
+  "m30_lowest_p10_next_60min",
+  "m30_highest_p90_next_60min",
+  "m30_lowest_p50_next_60min",
+  "m30_highest_p50_next_60min",
+  "m30_minutes_until_p50_below_70",
+  "m30_minutes_until_p50_above_180",
+  "m30_inconsistent",
+  "m60_30_p10",
+  "m60_30_p50",
+  "m60_30_p90",
+  "m60_60_p10",
+  "m60_60_p50",
+  "m60_60_p90",
+  "m60_lowest_p10_next_60min",
+  "m60_highest_p90_next_60min",
+  "m60_lowest_p50_next_60min",
+  "m60_highest_p50_next_60min",
+  "m60_minutes_until_p50_below_70",
+  "m60_minutes_until_p50_above_180",
+  "m60_inconsistent",
+  "hist_30_p10",
+  "hist_30_p50",
+  "hist_30_p90",
+  "hist_60_p10",
+  "hist_60_p50",
+  "hist_60_p90",
+  "hist_lowest_p10_next_60min",
+  "hist_highest_p90_next_60min",
+  "hist_lowest_p50_next_60min",
+  "hist_highest_p50_next_60min",
+  "hist_minutes_until_p50_below_70",
+  "hist_minutes_until_p50_above_180"
+ ],
+ "criterion": "(fixed before any result was seen): the classifier \"clearly beats the rule\"\nonly if, on the 7 TEST participants, the 95% participant-bootstrap interval of\n(classifier urgent recall - rule urgent recall) at matched specificity excludes 0.\nThe 12-person pool is supporting evidence only: validation people were used for the forecaster's\nearly stopping, so their forecast features are mildly optimistic. A run without cgmacros-035\n(146 of 256 urgent moments) checks the result is not one person.",
+ "logistic/all_12": {
+  "headline_test_7_people": {
+   "moments": 3244,
+   "labels": {
+    "routine": 2880,
+    "monitor": 322,
+    "urgent": 42
+   },
+   "urgent_people": [
+    "cgmacros-022",
+    "cgmacros-026",
+    "cgmacros-041"
+   ],
+   "urgent": {
+    "positives": 42,
+    "auroc": 0.878,
+    "rule_specificity": 0.993,
+    "classifier_specificity": 0.993,
+    "rule_recall": 0.548,
+    "classifier_recall": 0.524,
+    "recall_diff_ci95_by_participant": [
+     -0.059,
+     0.333
+    ],
+    "recall_by_person": {
+     "cgmacros-022": {
+      "n": 5,
+      "rule": 0.4,
+      "classifier": 0.4
+     },
+     "cgmacros-026": {
+      "n": 3,
+      "rule": 0.0,
+      "classifier": 0.333
+     },
+     "cgmacros-041": {
+      "n": 34,
+      "rule": 0.618,
+      "classifier": 0.559
+     }
+    }
+   },
+   "at_least_monitor": {
+    "positives": 364,
+    "auroc": 0.878,
+    "rule_specificity": 0.872,
+    "classifier_specificity": 0.872,
+    "rule_recall": 0.67,
+    "classifier_recall": 0.761,
+    "recall_diff_ci95_by_participant": [
+     0.041,
+     0.131
+    ],
+    "recall_by_person": {
+     "cgmacros-010": {
+      "n": 18,
+      "rule": 0.611,
+      "classifier": 0.778
+     },
+     "cgmacros-011": {
+      "n": 27,
+      "rule": 0.556,
+      "classifier": 0.63
+     },
+     "cgmacros-019": {
+      "n": 33,
+      "rule": 0.515,
+      "classifier": 0.667
+     },
+     "cgmacros-022": {
+      "n": 13,
+      "rule": 0.769,
+      "classifier": 0.538
+     },
+     "cgmacros-026": {
+      "n": 80,
+      "rule": 0.5,
+      "classifier": 0.6
+     },
+     "cgmacros-031": {
+      "n": 12,
+      "rule": 0.417,
+      "classifier": 0.583
+     },
+     "cgmacros-041": {
+      "n": 181,
+      "rule": 0.807,
+      "classifier": 0.895
+     }
+    }
+   }
+  },
+  "pool_all_12_people": {
+   "moments": 5590,
+   "labels": {
+    "routine": 4573,
+    "monitor": 761,
+    "urgent": 256
+   },
+   "urgent_people": [
+    "cgmacros-005",
+    "cgmacros-013",
+    "cgmacros-022",
+    "cgmacros-026",
+    "cgmacros-035",
+    "cgmacros-036",
+    "cgmacros-041"
+   ],
+   "urgent": {
+    "positives": 256,
+    "auroc": 0.822,
+    "rule_specificity": 0.985,
+    "classifier_specificity": 0.985,
+    "rule_recall": 0.625,
+    "classifier_recall": 0.344,
+    "recall_diff_ci95_by_participant": [
+     -0.461,
+     0.076
+    ],
+    "recall_by_person": {
+     "cgmacros-005": {
+      "n": 20,
+      "rule": 0.55,
+      "classifier": 0.55
+     },
+     "cgmacros-013": {
+      "n": 8,
+      "rule": 0.875,
+      "classifier": 0.125
+     },
+     "cgmacros-022": {
+      "n": 5,
+      "rule": 0.4,
+      "classifier": 0.4
+     },
+     "cgmacros-026": {
+      "n": 3,
+      "rule": 0.0,
+      "classifier": 0.333
+     },
+     "cgmacros-035": {
+      "n": 146,
+      "rule": 0.726,
+      "classifier": 0.233
+     },
+     "cgmacros-036": {
+      "n": 40,
+      "rule": 0.325,
+      "classifier": 0.425
+     },
+     "cgmacros-041": {
+      "n": 34,
+      "rule": 0.618,
+      "classifier": 0.647
+     }
+    }
+   },
+   "at_least_monitor": {
+    "positives": 1017,
+    "auroc": 0.912,
+    "rule_specificity": 0.858,
+    "classifier_specificity": 0.858,
+    "rule_recall": 0.803,
+    "classifier_recall": 0.851,
+    "recall_diff_ci95_by_participant": [
+     0.01,
+     0.096
+    ],
+    "recall_by_person": {
+     "cgmacros-004": {
+      "n": 3,
+      "rule": 0.667,
+      "classifier": 0.667
+     },
+     "cgmacros-005": {
+      "n": 85,
+      "rule": 0.659,
+      "classifier": 0.706
+     },
+     "cgmacros-010": {
+      "n": 18,
+      "rule": 0.611,
+      "classifier": 0.778
+     },
+     "cgmacros-011": {
+      "n": 27,
+      "rule": 0.556,
+      "classifier": 0.63
+     },
+     "cgmacros-013": {
+      "n": 21,
+      "rule": 0.81,
+      "classifier": 0.714
+     },
+     "cgmacros-019": {
+      "n": 33,
+      "rule": 0.515,
+      "classifier": 0.667
+     },
+     "cgmacros-022": {
+      "n": 13,
+      "rule": 0.769,
+      "classifier": 0.538
+     },
+     "cgmacros-026": {
+      "n": 80,
+      "rule": 0.5,
+      "classifier": 0.637
+     },
+     "cgmacros-031": {
+      "n": 12,
+      "rule": 0.417,
+      "classifier": 0.583
+     },
+     "cgmacros-035": {
+      "n": 415,
+      "rule": 0.949,
+      "classifier": 0.981
+     },
+     "cgmacros-036": {
+      "n": 129,
+      "rule": 0.806,
+      "classifier": 0.775
+     },
+     "cgmacros-041": {
+      "n": 181,
+      "rule": 0.807,
+      "classifier": 0.901
+     }
+    }
+   }
+  },
+  "on_the_98_eval_cases": {
+   "matched": 98,
+   "accuracy": 0.714,
+   "urgent_recall": 0.333,
+   "routine_recall": 0.925,
+   "under_triage": 0.224,
+   "over_triage": 0.061
+  }
+ },
+ "logistic/without_035": {
+  "headline_test_7_people": {
+   "moments": 3244,
+   "labels": {
+    "routine": 2880,
+    "monitor": 322,
+    "urgent": 42
+   },
+   "urgent_people": [
+    "cgmacros-022",
+    "cgmacros-026",
+    "cgmacros-041"
+   ],
+   "urgent": {
+    "positives": 42,
+    "auroc": 0.706,
+    "rule_specificity": 0.993,
+    "classifier_specificity": 0.993,
+    "rule_recall": 0.548,
+    "classifier_recall": 0.143,
+    "recall_diff_ci95_by_participant": [
+     -0.529,
+     0.333
+    ],
+    "recall_by_person": {
+     "cgmacros-022": {
+      "n": 5,
+      "rule": 0.4,
+      "classifier": 0.4
+     },
+     "cgmacros-026": {
+      "n": 3,
+      "rule": 0.0,
+      "classifier": 0.333
+     },
+     "cgmacros-041": {
+      "n": 34,
+      "rule": 0.618,
+      "classifier": 0.088
+     }
+    }
+   },
+   "at_least_monitor": {
+    "positives": 364,
+    "auroc": 0.849,
+    "rule_specificity": 0.872,
+    "classifier_specificity": 0.872,
+    "rule_recall": 0.67,
+    "classifier_recall": 0.739,
+    "recall_diff_ci95_by_participant": [
+     0.014,
+     0.099
+    ],
+    "recall_by_person": {
+     "cgmacros-010": {
+      "n": 18,
+      "rule": 0.611,
+      "classifier": 0.778
+     },
+     "cgmacros-011": {
+      "n": 27,
+      "rule": 0.556,
+      "classifier": 0.63
+     },
+     "cgmacros-019": {
+      "n": 33,
+      "rule": 0.515,
+      "classifier": 0.545
+     },
+     "cgmacros-022": {
+      "n": 13,
+      "rule": 0.769,
+      "classifier": 0.538
+     },
+     "cgmacros-026": {
+      "n": 80,
+      "rule": 0.5,
+      "classifier": 0.588
+     },
+     "cgmacros-031": {
+      "n": 12,
+      "rule": 0.417,
+      "classifier": 0.583
+     },
+     "cgmacros-041": {
+      "n": 181,
+      "rule": 0.807,
+      "classifier": 0.878
+     }
+    }
+   }
+  },
+  "pool_all_12_people": {
+   "moments": 5126,
+   "labels": {
+    "routine": 4524,
+    "monitor": 492,
+    "urgent": 110
+   },
+   "urgent_people": [
+    "cgmacros-005",
+    "cgmacros-013",
+    "cgmacros-022",
+    "cgmacros-026",
+    "cgmacros-036",
+    "cgmacros-041"
+   ],
+   "urgent": {
+    "positives": 110,
+    "auroc": 0.632,
+    "rule_specificity": 0.988,
+    "classifier_specificity": 0.988,
+    "rule_recall": 0.491,
+    "classifier_recall": 0.291,
+    "recall_diff_ci95_by_participant": [
+     -0.467,
+     0.071
+    ],
+    "recall_by_person": {
+     "cgmacros-005": {
+      "n": 20,
+      "rule": 0.55,
+      "classifier": 0.35
+     },
+     "cgmacros-013": {
+      "n": 8,
+      "rule": 0.875,
+      "classifier": 0.125
+     },
+     "cgmacros-022": {
+      "n": 5,
+      "rule": 0.4,
+      "classifier": 0.4
+     },
+     "cgmacros-026": {
+      "n": 3,
+      "rule": 0.0,
+      "classifier": 0.333
+     },
+     "cgmacros-036": {
+      "n": 40,
+      "rule": 0.325,
+      "classifier": 0.4
+     },
+     "cgmacros-041": {
+      "n": 34,
+      "rule": 0.618,
+      "classifier": 0.147
+     }
+    }
+   },
+   "at_least_monitor": {
+    "positives": 602,
+    "auroc": 0.845,
+    "rule_specificity": 0.861,
+    "classifier_specificity": 0.861,
+    "rule_recall": 0.703,
+    "classifier_recall": 0.741,
+    "recall_diff_ci95_by_participant": [
+     -0.01,
+     0.076
+    ],
+    "recall_by_person": {
+     "cgmacros-004": {
+      "n": 3,
+      "rule": 0.667,
+      "classifier": 0.667
+     },
+     "cgmacros-005": {
+      "n": 85,
+      "rule": 0.659,
+      "classifier": 0.682
+     },
+     "cgmacros-010": {
+      "n": 18,
+      "rule": 0.611,
+      "classifier": 0.778
+     },
+     "cgmacros-011": {
+      "n": 27,
+      "rule": 0.556,
+      "classifier": 0.63
+     },
+     "cgmacros-013": {
+      "n": 21,
+      "rule": 0.81,
+      "classifier": 0.762
+     },
+     "cgmacros-019": {
+      "n": 33,
+      "rule": 0.515,
+      "classifier": 0.545
+     },
+     "cgmacros-022": {
+      "n": 13,
+      "rule": 0.769,
+      "classifier": 0.538
+     },
+     "cgmacros-026": {
+      "n": 80,
+      "rule": 0.5,
+      "classifier": 0.6
+     },
+     "cgmacros-031": {
+      "n": 12,
+      "rule": 0.417,
+      "classifier": 0.583
+     },
+     "cgmacros-036": {
+      "n": 129,
+      "rule": 0.806,
+      "classifier": 0.775
+     },
+     "cgmacros-041": {
+      "n": 181,
+      "rule": 0.807,
+      "classifier": 0.878
+     }
+    }
+   }
+  }
+ },
+ "boosted_trees/all_12": {
+  "headline_test_7_people": {
+   "moments": 3244,
+   "labels": {
+    "routine": 2880,
+    "monitor": 322,
+    "urgent": 42
+   },
+   "urgent_people": [
+    "cgmacros-022",
+    "cgmacros-026",
+    "cgmacros-041"
+   ],
+   "urgent": {
+    "positives": 42,
+    "auroc": 0.935,
+    "rule_specificity": 0.993,
+    "classifier_specificity": 0.993,
+    "rule_recall": 0.548,
+    "classifier_recall": 0.643,
+    "recall_diff_ci95_by_participant": [
+     0.0,
+     0.333
+    ],
+    "recall_by_person": {
+     "cgmacros-022": {
+      "n": 5,
+      "rule": 0.4,
+      "classifier": 0.4
+     },
+     "cgmacros-026": {
+      "n": 3,
+      "rule": 0.0,
+      "classifier": 0.333
+     },
+     "cgmacros-041": {
+      "n": 34,
+      "rule": 0.618,
+      "classifier": 0.706
+     }
+    }
+   },
+   "at_least_monitor": {
+    "positives": 364,
+    "auroc": 0.878,
+    "rule_specificity": 0.872,
+    "classifier_specificity": 0.872,
+    "rule_recall": 0.67,
+    "classifier_recall": 0.728,
+    "recall_diff_ci95_by_participant": [
+     0.003,
+     0.136
+    ],
+    "recall_by_person": {
+     "cgmacros-010": {
+      "n": 18,
+      "rule": 0.611,
+      "classifier": 0.667
+     },
+     "cgmacros-011": {
+      "n": 27,
+      "rule": 0.556,
+      "classifier": 0.63
+     },
+     "cgmacros-019": {
+      "n": 33,
+      "rule": 0.515,
+      "classifier": 0.697
+     },
+     "cgmacros-022": {
+      "n": 13,
+      "rule": 0.769,
+      "classifier": 0.462
+     },
+     "cgmacros-026": {
+      "n": 80,
+      "rule": 0.5,
+      "classifier": 0.6
+     },
+     "cgmacros-031": {
+      "n": 12,
+      "rule": 0.417,
+      "classifier": 0.667
+     },
+     "cgmacros-041": {
+      "n": 181,
+      "rule": 0.807,
+      "classifier": 0.834
+     }
+    }
+   }
+  },
+  "pool_all_12_people": {
+   "moments": 5590,
+   "labels": {
+    "routine": 4573,
+    "monitor": 761,
+    "urgent": 256
+   },
+   "urgent_people": [
+    "cgmacros-005",
+    "cgmacros-013",
+    "cgmacros-022",
+    "cgmacros-026",
+    "cgmacros-035",
+    "cgmacros-036",
+    "cgmacros-041"
+   ],
+   "urgent": {
+    "positives": 256,
+    "auroc": 0.893,
+    "rule_specificity": 0.985,
+    "classifier_specificity": 0.985,
+    "rule_recall": 0.625,
+    "classifier_recall": 0.574,
+    "recall_diff_ci95_by_participant": [
+     -0.141,
+     0.122
+    ],
+    "recall_by_person": {
+     "cgmacros-005": {
+      "n": 20,
+      "rule": 0.55,
+      "classifier": 0.55
+     },
+     "cgmacros-013": {
+      "n": 8,
+      "rule": 0.875,
+      "classifier": 0.25
+     },
+     "cgmacros-022": {
+      "n": 5,
+      "rule": 0.4,
+      "classifier": 0.4
+     },
+     "cgmacros-026": {
+      "n": 3,
+      "rule": 0.0,
+      "classifier": 0.333
+     },
+     "cgmacros-035": {
+      "n": 146,
+      "rule": 0.726,
+      "classifier": 0.61
+     },
+     "cgmacros-036": {
+      "n": 40,
+      "rule": 0.325,
+      "classifier": 0.375
+     },
+     "cgmacros-041": {
+      "n": 34,
+      "rule": 0.618,
+      "classifier": 0.794
+     }
+    }
+   },
+   "at_least_monitor": {
+    "positives": 1017,
+    "auroc": 0.922,
+    "rule_specificity": 0.858,
+    "classifier_specificity": 0.858,
+    "rule_recall": 0.803,
+    "classifier_recall": 0.839,
+    "recall_diff_ci95_by_participant": [
+     -0.003,
+     0.096
+    ],
+    "recall_by_person": {
+     "cgmacros-004": {
+      "n": 3,
+      "rule": 0.667,
+      "classifier": 1.0
+     },
+     "cgmacros-005": {
+      "n": 85,
+      "rule": 0.659,
+      "classifier": 0.765
+     },
+     "cgmacros-010": {
+      "n": 18,
+      "rule": 0.611,
+      "classifier": 0.667
+     },
+     "cgmacros-011": {
+      "n": 27,
+      "rule": 0.556,
+      "classifier": 0.704
+     },
+     "cgmacros-013": {
+      "n": 21,
+      "rule": 0.81,
+      "classifier": 0.429
+     },
+     "cgmacros-019": {
+      "n": 33,
+      "rule": 0.515,
+      "classifier": 0.727
+     },
+     "cgmacros-022": {
+      "n": 13,
+      "rule": 0.769,
+      "classifier": 0.538
+     },
+     "cgmacros-026": {
+      "n": 80,
+      "rule": 0.5,
+      "classifier": 0.625
+     },
+     "cgmacros-031": {
+      "n": 12,
+      "rule": 0.417,
+      "classifier": 0.667
+     },
+     "cgmacros-035": {
+      "n": 415,
+      "rule": 0.949,
+      "classifier": 0.969
+     },
+     "cgmacros-036": {
+      "n": 129,
+      "rule": 0.806,
+      "classifier": 0.783
+     },
+     "cgmacros-041": {
+      "n": 181,
+      "rule": 0.807,
+      "classifier": 0.845
+     }
+    }
+   }
+  },
+  "on_the_98_eval_cases": {
+   "matched": 98,
+   "accuracy": 0.714,
+   "urgent_recall": 0.556,
+   "routine_recall": 0.85,
+   "under_triage": 0.204,
+   "over_triage": 0.082
+  }
+ },
+ "boosted_trees/without_035": {
+  "headline_test_7_people": {
+   "moments": 3244,
+   "labels": {
+    "routine": 2880,
+    "monitor": 322,
+    "urgent": 42
+   },
+   "urgent_people": [
+    "cgmacros-022",
+    "cgmacros-026",
+    "cgmacros-041"
+   ],
+   "urgent": {
+    "positives": 42,
+    "auroc": 0.912,
+    "rule_specificity": 0.993,
+    "classifier_specificity": 0.993,
+    "rule_recall": 0.548,
+    "classifier_recall": 0.571,
+    "recall_diff_ci95_by_participant": [
+     0.0,
+     0.333
+    ],
+    "recall_by_person": {
+     "cgmacros-022": {
+      "n": 5,
+      "rule": 0.4,
+      "classifier": 0.4
+     },
+     "cgmacros-026": {
+      "n": 3,
+      "rule": 0.0,
+      "classifier": 0.333
+     },
+     "cgmacros-041": {
+      "n": 34,
+      "rule": 0.618,
+      "classifier": 0.618
+     }
+    }
+   },
+   "at_least_monitor": {
+    "positives": 364,
+    "auroc": 0.872,
+    "rule_specificity": 0.872,
+    "classifier_specificity": 0.872,
+    "rule_recall": 0.67,
+    "classifier_recall": 0.728,
+    "recall_diff_ci95_by_participant": [
+     0.0,
+     0.131
+    ],
+    "recall_by_person": {
+     "cgmacros-010": {
+      "n": 18,
+      "rule": 0.611,
+      "classifier": 0.667
+     },
+     "cgmacros-011": {
+      "n": 27,
+      "rule": 0.556,
+      "classifier": 0.63
+     },
+     "cgmacros-019": {
+      "n": 33,
+      "rule": 0.515,
+      "classifier": 0.758
+     },
+     "cgmacros-022": {
+      "n": 13,
+      "rule": 0.769,
+      "classifier": 0.462
+     },
+     "cgmacros-026": {
+      "n": 80,
+      "rule": 0.5,
+      "classifier": 0.575
+     },
+     "cgmacros-031": {
+      "n": 12,
+      "rule": 0.417,
+      "classifier": 0.5
+     },
+     "cgmacros-041": {
+      "n": 181,
+      "rule": 0.807,
+      "classifier": 0.845
+     }
+    }
+   }
+  },
+  "pool_all_12_people": {
+   "moments": 5126,
+   "labels": {
+    "routine": 4524,
+    "monitor": 492,
+    "urgent": 110
+   },
+   "urgent_people": [
+    "cgmacros-005",
+    "cgmacros-013",
+    "cgmacros-022",
+    "cgmacros-026",
+    "cgmacros-036",
+    "cgmacros-041"
+   ],
+   "urgent": {
+    "positives": 110,
+    "auroc": 0.878,
+    "rule_specificity": 0.988,
+    "classifier_specificity": 0.988,
+    "rule_recall": 0.491,
+    "classifier_recall": 0.482,
+    "recall_diff_ci95_by_participant": [
+     -0.286,
+     0.093
+    ],
+    "recall_by_person": {
+     "cgmacros-005": {
+      "n": 20,
+      "rule": 0.55,
+      "classifier": 0.45
+     },
+     "cgmacros-013": {
+      "n": 8,
+      "rule": 0.875,
+      "classifier": 0.125
+     },
+     "cgmacros-022": {
+      "n": 5,
+      "rule": 0.4,
+      "classifier": 0.4
+     },
+     "cgmacros-026": {
+      "n": 3,
+      "rule": 0.0,
+      "classifier": 0.333
+     },
+     "cgmacros-036": {
+      "n": 40,
+      "rule": 0.325,
+      "classifier": 0.4
+     },
+     "cgmacros-041": {
+      "n": 34,
+      "rule": 0.618,
+      "classifier": 0.706
+     }
+    }
+   },
+   "at_least_monitor": {
+    "positives": 602,
+    "auroc": 0.878,
+    "rule_specificity": 0.861,
+    "classifier_specificity": 0.861,
+    "rule_recall": 0.703,
+    "classifier_recall": 0.752,
+    "recall_diff_ci95_by_participant": [
+     0.002,
+     0.109
+    ],
+    "recall_by_person": {
+     "cgmacros-004": {
+      "n": 3,
+      "rule": 0.667,
+      "classifier": 1.0
+     },
+     "cgmacros-005": {
+      "n": 85,
+      "rule": 0.659,
+      "classifier": 0.729
+     },
+     "cgmacros-010": {
+      "n": 18,
+      "rule": 0.611,
+      "classifier": 0.667
+     },
+     "cgmacros-011": {
+      "n": 27,
+      "rule": 0.556,
+      "classifier": 0.704
+     },
+     "cgmacros-013": {
+      "n": 21,
+      "rule": 0.81,
+      "classifier": 0.667
+     },
+     "cgmacros-019": {
+      "n": 33,
+      "rule": 0.515,
+      "classifier": 0.758
+     },
+     "cgmacros-022": {
+      "n": 13,
+      "rule": 0.769,
+      "classifier": 0.462
+     },
+     "cgmacros-026": {
+      "n": 80,
+      "rule": 0.5,
+      "classifier": 0.6
+     },
+     "cgmacros-031": {
+      "n": 12,
+      "rule": 0.417,
+      "classifier": 0.667
+     },
+     "cgmacros-036": {
+      "n": 129,
+      "rule": 0.806,
+      "classifier": 0.783
+     },
+     "cgmacros-041": {
+      "n": 181,
+      "rule": 0.807,
+      "classifier": 0.856
+     }
+    }
+   }
+  }
+ }
+}

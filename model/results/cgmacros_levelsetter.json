@@ -1,0 +1,862 @@
+{
+ "preregistration": "(written before the first run, 2026-11-16):\n  Primary policy  \"rule_urgent+clf\": level = urgent if the rule says urgent; otherwise monitor if the classifier's\n                  P(at least monitor) >= t_m, else routine. It may turn a rule 'monitor' into 'routine'; it never\n                  lowers a rule 'urgent'.\n  Primary model   multinomial logistic regression (exports to plain coefficients, so the agents need no sklearn;\n                  it had the strongest routine/monitor signal on the test people in model/cgmacros/ceiling.py).\n  Protocol        nested leave-one-participant-out over the 12 people the forecaster never trained on: for each\n                  held-out person, the model AND t_m come only from the other 11 (t_m matches the rule's\n                  'routine' specificity on those 11 people's own out-of-fold predictions).\n  Criterion       on the 7 TEST people, versus the rule: under-triage is lower, with the 95% participant-bootstrap\n                  interval of (rule - policy) under-triage excluding 0, AND over-triage is at most 5 points higher.\n  Everything else (boosted trees, classifier-only, max(rule, classifier)) is secondary.\n  Caveat          the routine/monitor signal was found on these same 12 people, so this shows whether a deployable\n                  version keeps it; it cannot confirm it. Confirmation needs people neither model has seen.",
+ "labels_test": {
+  "routine": 2880,
+  "monitor": 322,
+  "urgent": 42
+ },
+ "logistic/rule_urgent+clf": {
+  "test_7_people": {
+   "n": 3244,
+   "accuracy": 0.837,
+   "under_triage": 0.0287,
+   "over_triage": 0.1344,
+   "rule_under_triage": 0.0416,
+   "rule_over_triage": 0.1171,
+   "under_reduction_ci95_by_person": [
+    0.0046,
+    0.0226
+   ],
+   "over_increase_ci95_by_person": [
+    -0.041,
+    0.0892
+   ],
+   "severe_under_triage_urgent_called_routine": 6,
+   "rule_severe_under_triage_urgent_called_routine": 4,
+   "urgent_recall": 0.548,
+   "routine_recall": 0.852,
+   "monitor_recall": 0.77,
+   "downgrades_rule_monitor_to_routine": 236,
+   "downgrades_that_needed_attention": 9,
+   "downgrades_that_were_urgent": 3,
+   "downgrades_by_person": {
+    "cgmacros-010": {
+     "downgrades": 51,
+     "needed_attention": 1
+    },
+    "cgmacros-011": {
+     "downgrades": 33,
+     "needed_attention": 0
+    },
+    "cgmacros-019": {
+     "downgrades": 6,
+     "needed_attention": 0
+    },
+    "cgmacros-022": {
+     "downgrades": 59,
+     "needed_attention": 5
+    },
+    "cgmacros-026": {
+     "downgrades": 31,
+     "needed_attention": 1
+    },
+    "cgmacros-031": {
+     "downgrades": 42,
+     "needed_attention": 0
+    },
+    "cgmacros-041": {
+     "downgrades": 14,
+     "needed_attention": 2
+    }
+   },
+   "upgrades": 332
+  },
+  "all_12_people": {
+   "n": 5590,
+   "accuracy": 0.827,
+   "under_triage": 0.0408,
+   "over_triage": 0.1324,
+   "rule_under_triage": 0.0503,
+   "rule_over_triage": 0.1259,
+   "under_reduction_ci95_by_person": [
+    0.0037,
+    0.0163
+   ],
+   "over_increase_ci95_by_person": [
+    -0.0372,
+    0.0565
+   ],
+   "severe_under_triage_urgent_called_routine": 22,
+   "rule_severe_under_triage_urgent_called_routine": 15,
+   "urgent_recall": 0.625,
+   "routine_recall": 0.85,
+   "monitor_recall": 0.827,
+   "downgrades_rule_monitor_to_routine": 438,
+   "downgrades_that_needed_attention": 30,
+   "downgrades_that_were_urgent": 13,
+   "downgrades_by_person": {
+    "cgmacros-004": {
+     "downgrades": 50,
+     "needed_attention": 0
+    },
+    "cgmacros-005": {
+     "downgrades": 19,
+     "needed_attention": 2
+    },
+    "cgmacros-010": {
+     "downgrades": 51,
+     "needed_attention": 1
+    },
+    "cgmacros-011": {
+     "downgrades": 33,
+     "needed_attention": 0
+    },
+    "cgmacros-013": {
+     "downgrades": 59,
+     "needed_attention": 3
+    },
+    "cgmacros-019": {
+     "downgrades": 6,
+     "needed_attention": 0
+    },
+    "cgmacros-022": {
+     "downgrades": 59,
+     "needed_attention": 5
+    },
+    "cgmacros-026": {
+     "downgrades": 31,
+     "needed_attention": 1
+    },
+    "cgmacros-031": {
+     "downgrades": 42,
+     "needed_attention": 0
+    },
+    "cgmacros-035": {
+     "downgrades": 8,
+     "needed_attention": 6
+    },
+    "cgmacros-036": {
+     "downgrades": 66,
+     "needed_attention": 10
+    },
+    "cgmacros-041": {
+     "downgrades": 14,
+     "needed_attention": 2
+    }
+   },
+   "upgrades": 520
+  },
+  "the_98_eval_cases": {
+   "n": 98,
+   "accuracy": 0.714,
+   "under_triage": 0.2245,
+   "over_triage": 0.0612,
+   "rule_under_triage": 0.2653,
+   "rule_over_triage": 0.0408,
+   "under_reduction_ci95_by_person": [
+    0.0,
+    0.093
+   ],
+   "over_increase_ci95_by_person": [
+    -0.0345,
+    0.0631
+   ],
+   "severe_under_triage_urgent_called_routine": 6,
+   "rule_severe_under_triage_urgent_called_routine": 3,
+   "urgent_recall": 0.333,
+   "routine_recall": 0.875,
+   "monitor_recall": 0.75,
+   "downgrades_rule_monitor_to_routine": 7,
+   "downgrades_that_needed_attention": 5,
+   "downgrades_that_were_urgent": 3,
+   "downgrades_by_person": {
+    "cgmacros-011": {
+     "downgrades": 1,
+     "needed_attention": 0
+    },
+    "cgmacros-022": {
+     "downgrades": 5,
+     "needed_attention": 5
+    },
+    "cgmacros-031": {
+     "downgrades": 1,
+     "needed_attention": 0
+    }
+   },
+   "upgrades": 10
+  }
+ },
+ "logistic/classifier_only": {
+  "test_7_people": {
+   "n": 3244,
+   "accuracy": 0.833,
+   "under_triage": 0.0281,
+   "over_triage": 0.139,
+   "rule_under_triage": 0.0416,
+   "rule_over_triage": 0.1171,
+   "under_reduction_ci95_by_person": [
+    0.0046,
+    0.0239
+   ],
+   "over_increase_ci95_by_person": [
+    -0.0415,
+    0.0997
+   ],
+   "severe_under_triage_urgent_called_routine": 6,
+   "rule_severe_under_triage_urgent_called_routine": 4,
+   "urgent_recall": 0.595,
+   "routine_recall": 0.855,
+   "monitor_recall": 0.77,
+   "downgrades_rule_monitor_to_routine": 236,
+   "downgrades_that_needed_attention": 9,
+   "downgrades_that_were_urgent": 3,
+   "downgrades_by_person": {
+    "cgmacros-010": {
+     "downgrades": 51,
+     "needed_attention": 1
+    },
+    "cgmacros-011": {
+     "downgrades": 33,
+     "needed_attention": 0
+    },
+    "cgmacros-019": {
+     "downgrades": 6,
+     "needed_attention": 0
+    },
+    "cgmacros-022": {
+     "downgrades": 59,
+     "needed_attention": 5
+    },
+    "cgmacros-026": {
+     "downgrades": 31,
+     "needed_attention": 1
+    },
+    "cgmacros-031": {
+     "downgrades": 42,
+     "needed_attention": 0
+    },
+    "cgmacros-041": {
+     "downgrades": 14,
+     "needed_attention": 2
+    }
+   },
+   "upgrades": 366
+  },
+  "all_12_people": {
+   "n": 5590,
+   "accuracy": 0.815,
+   "under_triage": 0.0565,
+   "over_triage": 0.1286,
+   "rule_under_triage": 0.0503,
+   "rule_over_triage": 0.1259,
+   "under_reduction_ci95_by_person": [
+    -0.0388,
+    0.0149
+   ],
+   "over_increase_ci95_by_person": [
+    -0.044,
+    0.0574
+   ],
+   "severe_under_triage_urgent_called_routine": 22,
+   "rule_severe_under_triage_urgent_called_routine": 15,
+   "urgent_recall": 0.285,
+   "routine_recall": 0.853,
+   "monitor_recall": 0.825,
+   "downgrades_rule_monitor_to_routine": 438,
+   "downgrades_that_needed_attention": 30,
+   "downgrades_that_were_urgent": 13,
+   "downgrades_by_person": {
+    "cgmacros-004": {
+     "downgrades": 50,
+     "needed_attention": 0
+    },
+    "cgmacros-005": {
+     "downgrades": 19,
+     "needed_attention": 2
+    },
+    "cgmacros-010": {
+     "downgrades": 51,
+     "needed_attention": 1
+    },
+    "cgmacros-011": {
+     "downgrades": 33,
+     "needed_attention": 0
+    },
+    "cgmacros-013": {
+     "downgrades": 59,
+     "needed_attention": 3
+    },
+    "cgmacros-019": {
+     "downgrades": 6,
+     "needed_attention": 0
+    },
+    "cgmacros-022": {
+     "downgrades": 59,
+     "needed_attention": 5
+    },
+    "cgmacros-026": {
+     "downgrades": 31,
+     "needed_attention": 1
+    },
+    "cgmacros-031": {
+     "downgrades": 42,
+     "needed_attention": 0
+    },
+    "cgmacros-035": {
+     "downgrades": 8,
+     "needed_attention": 6
+    },
+    "cgmacros-036": {
+     "downgrades": 66,
+     "needed_attention": 10
+    },
+    "cgmacros-041": {
+     "downgrades": 14,
+     "needed_attention": 2
+    }
+   },
+   "upgrades": 569
+  },
+  "the_98_eval_cases": {
+   "n": 98,
+   "accuracy": 0.694,
+   "under_triage": 0.2143,
+   "over_triage": 0.0918,
+   "rule_under_triage": 0.2653,
+   "rule_over_triage": 0.0408,
+   "under_reduction_ci95_by_person": [
+    0.0,
+    0.1204
+   ],
+   "over_increase_ci95_by_person": [
+    -0.0273,
+    0.1296
+   ],
+   "severe_under_triage_urgent_called_routine": 6,
+   "rule_severe_under_triage_urgent_called_routine": 3,
+   "urgent_recall": 0.389,
+   "routine_recall": 0.875,
+   "monitor_recall": 0.75,
+   "downgrades_rule_monitor_to_routine": 7,
+   "downgrades_that_needed_attention": 5,
+   "downgrades_that_were_urgent": 3,
+   "downgrades_by_person": {
+    "cgmacros-011": {
+     "downgrades": 1,
+     "needed_attention": 0
+    },
+    "cgmacros-022": {
+     "downgrades": 5,
+     "needed_attention": 5
+    },
+    "cgmacros-031": {
+     "downgrades": 1,
+     "needed_attention": 0
+    }
+   },
+   "upgrades": 14
+  }
+ },
+ "logistic/max(rule,classifier)": {
+  "test_7_people": {
+   "n": 3244,
+   "accuracy": 0.763,
+   "under_triage": 0.0253,
+   "over_triage": 0.2115,
+   "rule_under_triage": 0.0416,
+   "rule_over_triage": 0.1171,
+   "under_reduction_ci95_by_person": [
+    0.0061,
+    0.0291
+   ],
+   "over_increase_ci95_by_person": [
+    0.0539,
+    0.1506
+   ],
+   "severe_under_triage_urgent_called_routine": 3,
+   "rule_severe_under_triage_urgent_called_routine": 4,
+   "urgent_recall": 0.667,
+   "routine_recall": 0.774,
+   "monitor_recall": 0.789,
+   "downgrades_rule_monitor_to_routine": 0,
+   "downgrades_that_needed_attention": 0,
+   "downgrades_that_were_urgent": 0,
+   "downgrades_by_person": {},
+   "upgrades": 366
+  },
+  "all_12_people": {
+   "n": 5590,
+   "accuracy": 0.754,
+   "under_triage": 0.036,
+   "over_triage": 0.2104,
+   "rule_under_triage": 0.0503,
+   "rule_over_triage": 0.1259,
+   "under_reduction_ci95_by_person": [
+    0.0071,
+    0.0229
+   ],
+   "over_increase_ci95_by_person": [
+    0.0528,
+    0.1241
+   ],
+   "severe_under_triage_urgent_called_routine": 9,
+   "rule_severe_under_triage_urgent_called_routine": 15,
+   "urgent_recall": 0.664,
+   "routine_recall": 0.761,
+   "monitor_recall": 0.849,
+   "downgrades_rule_monitor_to_routine": 0,
+   "downgrades_that_needed_attention": 0,
+   "downgrades_that_were_urgent": 0,
+   "downgrades_by_person": {},
+   "upgrades": 569
+  },
+  "the_98_eval_cases": {
+   "n": 98,
+   "accuracy": 0.704,
+   "under_triage": 0.1837,
+   "over_triage": 0.1122,
+   "rule_under_triage": 0.2653,
+   "rule_over_triage": 0.0408,
+   "under_reduction_ci95_by_person": [
+    0.0253,
+    0.1389
+   ],
+   "over_increase_ci95_by_person": [
+    0.0167,
+    0.1389
+   ],
+   "severe_under_triage_urgent_called_routine": 3,
+   "rule_severe_under_triage_urgent_called_routine": 3,
+   "urgent_recall": 0.444,
+   "routine_recall": 0.825,
+   "monitor_recall": 0.8,
+   "downgrades_rule_monitor_to_routine": 0,
+   "downgrades_that_needed_attention": 0,
+   "downgrades_that_were_urgent": 0,
+   "downgrades_by_person": {},
+   "upgrades": 14
+  }
+ },
+ "boosted_trees/rule_urgent+clf": {
+  "test_7_people": {
+   "n": 3244,
+   "accuracy": 0.813,
+   "under_triage": 0.0299,
+   "over_triage": 0.1569,
+   "rule_under_triage": 0.0416,
+   "rule_over_triage": 0.1171,
+   "under_reduction_ci95_by_person": [
+    0.0047,
+    0.0185
+   ],
+   "over_increase_ci95_by_person": [
+    -0.0209,
+    0.0999
+   ],
+   "severe_under_triage_urgent_called_routine": 4,
+   "rule_severe_under_triage_urgent_called_routine": 4,
+   "urgent_recall": 0.548,
+   "routine_recall": 0.827,
+   "monitor_recall": 0.758,
+   "downgrades_rule_monitor_to_routine": 256,
+   "downgrades_that_needed_attention": 13,
+   "downgrades_that_were_urgent": 2,
+   "downgrades_by_person": {
+    "cgmacros-010": {
+     "downgrades": 56,
+     "needed_attention": 1
+    },
+    "cgmacros-011": {
+     "downgrades": 36,
+     "needed_attention": 1
+    },
+    "cgmacros-019": {
+     "downgrades": 11,
+     "needed_attention": 1
+    },
+    "cgmacros-022": {
+     "downgrades": 59,
+     "needed_attention": 4
+    },
+    "cgmacros-026": {
+     "downgrades": 31,
+     "needed_attention": 2
+    },
+    "cgmacros-031": {
+     "downgrades": 44,
+     "needed_attention": 0
+    },
+    "cgmacros-041": {
+     "downgrades": 19,
+     "needed_attention": 4
+    }
+   },
+   "upgrades": 423
+  },
+  "all_12_people": {
+   "n": 5590,
+   "accuracy": 0.817,
+   "under_triage": 0.0403,
+   "over_triage": 0.1431,
+   "rule_under_triage": 0.0503,
+   "rule_over_triage": 0.1259,
+   "under_reduction_ci95_by_person": [
+    0.0046,
+    0.0153
+   ],
+   "over_increase_ci95_by_person": [
+    -0.0262,
+    0.0633
+   ],
+   "severe_under_triage_urgent_called_routine": 18,
+   "rule_severe_under_triage_urgent_called_routine": 15,
+   "urgent_recall": 0.625,
+   "routine_recall": 0.837,
+   "monitor_recall": 0.83,
+   "downgrades_rule_monitor_to_routine": 476,
+   "downgrades_that_needed_attention": 34,
+   "downgrades_that_were_urgent": 10,
+   "downgrades_by_person": {
+    "cgmacros-004": {
+     "downgrades": 50,
+     "needed_attention": 0
+    },
+    "cgmacros-005": {
+     "downgrades": 34,
+     "needed_attention": 3
+    },
+    "cgmacros-010": {
+     "downgrades": 56,
+     "needed_attention": 1
+    },
+    "cgmacros-011": {
+     "downgrades": 36,
+     "needed_attention": 1
+    },
+    "cgmacros-013": {
+     "downgrades": 65,
+     "needed_attention": 4
+    },
+    "cgmacros-019": {
+     "downgrades": 11,
+     "needed_attention": 1
+    },
+    "cgmacros-022": {
+     "downgrades": 59,
+     "needed_attention": 4
+    },
+    "cgmacros-026": {
+     "downgrades": 31,
+     "needed_attention": 2
+    },
+    "cgmacros-031": {
+     "downgrades": 44,
+     "needed_attention": 0
+    },
+    "cgmacros-035": {
+     "downgrades": 9,
+     "needed_attention": 5
+    },
+    "cgmacros-036": {
+     "downgrades": 62,
+     "needed_attention": 9
+    },
+    "cgmacros-041": {
+     "downgrades": 19,
+     "needed_attention": 4
+    }
+   },
+   "upgrades": 625
+  },
+  "the_98_eval_cases": {
+   "n": 98,
+   "accuracy": 0.694,
+   "under_triage": 0.2347,
+   "over_triage": 0.0714,
+   "rule_under_triage": 0.2653,
+   "rule_over_triage": 0.0408,
+   "under_reduction_ci95_by_person": [
+    -0.0215,
+    0.093
+   ],
+   "over_increase_ci95_by_person": [
+    -0.0244,
+    0.0781
+   ],
+   "severe_under_triage_urgent_called_routine": 4,
+   "rule_severe_under_triage_urgent_called_routine": 3,
+   "urgent_recall": 0.333,
+   "routine_recall": 0.85,
+   "monitor_recall": 0.725,
+   "downgrades_rule_monitor_to_routine": 7,
+   "downgrades_that_needed_attention": 4,
+   "downgrades_that_were_urgent": 2,
+   "downgrades_by_person": {
+    "cgmacros-011": {
+     "downgrades": 1,
+     "needed_attention": 0
+    },
+    "cgmacros-019": {
+     "downgrades": 1,
+     "needed_attention": 0
+    },
+    "cgmacros-022": {
+     "downgrades": 4,
+     "needed_attention": 4
+    },
+    "cgmacros-031": {
+     "downgrades": 1,
+     "needed_attention": 0
+    }
+   },
+   "upgrades": 12
+  }
+ },
+ "boosted_trees/classifier_only": {
+  "test_7_people": {
+   "n": 3244,
+   "accuracy": 0.808,
+   "under_triage": 0.0274,
+   "over_triage": 0.1643,
+   "rule_under_triage": 0.0416,
+   "rule_over_triage": 0.1171,
+   "under_reduction_ci95_by_person": [
+    0.0052,
+    0.0242
+   ],
+   "over_increase_ci95_by_person": [
+    -0.0206,
+    0.1158
+   ],
+   "severe_under_triage_urgent_called_routine": 4,
+   "rule_severe_under_triage_urgent_called_routine": 4,
+   "urgent_recall": 0.738,
+   "routine_recall": 0.829,
+   "monitor_recall": 0.758,
+   "downgrades_rule_monitor_to_routine": 256,
+   "downgrades_that_needed_attention": 13,
+   "downgrades_that_were_urgent": 2,
+   "downgrades_by_person": {
+    "cgmacros-010": {
+     "downgrades": 56,
+     "needed_attention": 1
+    },
+    "cgmacros-011": {
+     "downgrades": 36,
+     "needed_attention": 1
+    },
+    "cgmacros-019": {
+     "downgrades": 11,
+     "needed_attention": 1
+    },
+    "cgmacros-022": {
+     "downgrades": 59,
+     "needed_attention": 4
+    },
+    "cgmacros-026": {
+     "downgrades": 31,
+     "needed_attention": 2
+    },
+    "cgmacros-031": {
+     "downgrades": 44,
+     "needed_attention": 0
+    },
+    "cgmacros-041": {
+     "downgrades": 19,
+     "needed_attention": 4
+    }
+   },
+   "upgrades": 467
+  },
+  "all_12_people": {
+   "n": 5590,
+   "accuracy": 0.815,
+   "under_triage": 0.0428,
+   "over_triage": 0.1424,
+   "rule_under_triage": 0.0503,
+   "rule_over_triage": 0.1259,
+   "under_reduction_ci95_by_person": [
+    -0.0005,
+    0.0163
+   ],
+   "over_increase_ci95_by_person": [
+    -0.0309,
+    0.0693
+   ],
+   "severe_under_triage_urgent_called_routine": 23,
+   "rule_severe_under_triage_urgent_called_routine": 15,
+   "urgent_recall": 0.574,
+   "routine_recall": 0.839,
+   "monitor_recall": 0.829,
+   "downgrades_rule_monitor_to_routine": 476,
+   "downgrades_that_needed_attention": 34,
+   "downgrades_that_were_urgent": 10,
+   "downgrades_by_person": {
+    "cgmacros-004": {
+     "downgrades": 50,
+     "needed_attention": 0
+    },
+    "cgmacros-005": {
+     "downgrades": 34,
+     "needed_attention": 3
+    },
+    "cgmacros-010": {
+     "downgrades": 56,
+     "needed_attention": 1
+    },
+    "cgmacros-011": {
+     "downgrades": 36,
+     "needed_attention": 1
+    },
+    "cgmacros-013": {
+     "downgrades": 65,
+     "needed_attention": 4
+    },
+    "cgmacros-019": {
+     "downgrades": 11,
+     "needed_attention": 1
+    },
+    "cgmacros-022": {
+     "downgrades": 59,
+     "needed_attention": 4
+    },
+    "cgmacros-026": {
+     "downgrades": 31,
+     "needed_attention": 2
+    },
+    "cgmacros-031": {
+     "downgrades": 44,
+     "needed_attention": 0
+    },
+    "cgmacros-035": {
+     "downgrades": 9,
+     "needed_attention": 5
+    },
+    "cgmacros-036": {
+     "downgrades": 62,
+     "needed_attention": 9
+    },
+    "cgmacros-041": {
+     "downgrades": 19,
+     "needed_attention": 4
+    }
+   },
+   "upgrades": 679
+  },
+  "the_98_eval_cases": {
+   "n": 98,
+   "accuracy": 0.714,
+   "under_triage": 0.1837,
+   "over_triage": 0.102,
+   "rule_under_triage": 0.2653,
+   "rule_over_triage": 0.0408,
+   "under_reduction_ci95_by_person": [
+    -0.0123,
+    0.156
+   ],
+   "over_increase_ci95_by_person": [
+    -0.0132,
+    0.11
+   ],
+   "severe_under_triage_urgent_called_routine": 4,
+   "rule_severe_under_triage_urgent_called_routine": 3,
+   "urgent_recall": 0.611,
+   "routine_recall": 0.85,
+   "monitor_recall": 0.725,
+   "downgrades_rule_monitor_to_routine": 7,
+   "downgrades_that_needed_attention": 4,
+   "downgrades_that_were_urgent": 2,
+   "downgrades_by_person": {
+    "cgmacros-011": {
+     "downgrades": 1,
+     "needed_attention": 0
+    },
+    "cgmacros-019": {
+     "downgrades": 1,
+     "needed_attention": 0
+    },
+    "cgmacros-022": {
+     "downgrades": 4,
+     "needed_attention": 4
+    },
+    "cgmacros-031": {
+     "downgrades": 1,
+     "needed_attention": 0
+    }
+   },
+   "upgrades": 20
+  }
+ },
+ "boosted_trees/max(rule,classifier)": {
+  "test_7_people": {
+   "n": 3244,
+   "accuracy": 0.734,
+   "under_triage": 0.0237,
+   "over_triage": 0.242,
+   "rule_under_triage": 0.0416,
+   "rule_over_triage": 0.1171,
+   "under_reduction_ci95_by_person": [
+    0.0076,
+    0.0301
+   ],
+   "over_increase_ci95_by_person": [
+    0.0821,
+    0.1697
+   ],
+   "severe_under_triage_urgent_called_routine": 2,
+   "rule_severe_under_triage_urgent_called_routine": 4,
+   "urgent_recall": 0.762,
+   "routine_recall": 0.743,
+   "monitor_recall": 0.792,
+   "downgrades_rule_monitor_to_routine": 0,
+   "downgrades_that_needed_attention": 0,
+   "downgrades_that_were_urgent": 0,
+   "downgrades_by_person": {},
+   "upgrades": 467
+  },
+  "all_12_people": {
+   "n": 5590,
+   "accuracy": 0.737,
+   "under_triage": 0.0338,
+   "over_triage": 0.2288,
+   "rule_under_triage": 0.0503,
+   "rule_over_triage": 0.1259,
+   "under_reduction_ci95_by_person": [
+    0.0089,
+    0.0254
+   ],
+   "over_increase_ci95_by_person": [
+    0.0715,
+    0.1376
+   ],
+   "severe_under_triage_urgent_called_routine": 8,
+   "rule_severe_under_triage_urgent_called_routine": 15,
+   "urgent_recall": 0.672,
+   "routine_recall": 0.74,
+   "monitor_recall": 0.862,
+   "downgrades_rule_monitor_to_routine": 0,
+   "downgrades_that_needed_attention": 0,
+   "downgrades_that_were_urgent": 0,
+   "downgrades_by_person": {},
+   "upgrades": 679
+  },
+  "the_98_eval_cases": {
+   "n": 98,
+   "accuracy": 0.704,
+   "under_triage": 0.1633,
+   "over_triage": 0.1327,
+   "rule_under_triage": 0.2653,
+   "rule_over_triage": 0.0408,
+   "under_reduction_ci95_by_person": [
+    0.0267,
+    0.1603
+   ],
+   "over_increase_ci95_by_person": [
+    0.0455,
+    0.1293
+   ],
+   "severe_under_triage_urgent_called_routine": 2,
+   "rule_severe_under_triage_urgent_called_routine": 3,
+   "urgent_recall": 0.611,
+   "routine_recall": 0.775,
+   "monitor_recall": 0.775,
+   "downgrades_rule_monitor_to_routine": 0,
+   "downgrades_that_needed_attention": 0,
+   "downgrades_that_were_urgent": 0,
+   "downgrades_by_person": {},
+   "upgrades": 20
+  }
+ },
+ "primary_criterion_met": true,
+ "exported_threshold": 0.40614730464757715
+}

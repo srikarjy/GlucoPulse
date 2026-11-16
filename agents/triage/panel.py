@@ -184,17 +184,41 @@ def _rule(provider: CaseProvider) -> Level:
     return rule_level(provider.packet["glucose_summary"], scen["no_new_meal"], scen.get("history_only"))
 
 
+def _final_level(provider: CaseProvider, rule: Level, llm_level: Level,
+                 level_source: str) -> tuple[Level, list[str], str, list[str]]:
+    """Returns (level, notes for the clinician, the level source actually used, errors).
+    rule_floor (default): max(rule, LLM). levelsetter: the level-setter decides and the LLM cannot raise it; a
+    disagreeing LLM level is kept as a note, never silently dropped. If the level-setter cannot run, fall back to
+    rule_floor and say so (fail safe, not silent)."""
+    if level_source not in ("rule_floor", "levelsetter"):
+        raise ValueError(f"unknown level_source {level_source!r}")
+    if level_source == "levelsetter":
+        try:
+            from agents.triage.levelsetter import set_level
+            level, _ = set_level(provider.packet, rule)
+        except Exception as e:  # noqa: BLE001 - any failure falls back to the rule floor, recorded
+            return (higher(rule, llm_level), ["Level-setter unavailable; level is max(rule, language model)."],
+                    "rule_floor", [f"levelsetter: {type(e).__name__}"])
+        notes = [] if llm_level == level else [
+            f"The language model proposed {llm_level}; the level is set by the rule and level-setter model ({level})."]
+        if rule != level:
+            notes.append(f"The rule alone gives {rule}; the level-setter model gives {level}.")
+        return level, notes, "levelsetter", []
+    return higher(rule, llm_level), [], "rule_floor", []
+
+
 def _record(gw: LocalGateway, report: TriageReport, mode: str) -> None:
     gw.invoke("audit_write", action=f"draft_triage_{mode}", resource_type="TriageReport", patient=report.patient,
               outcome="success", detail={"level": report.level, "rule_level": report.rule_level,
-                                         "panel_level": report.panel_level, "as_of": report.as_of,
+                                         "panel_level": report.panel_level, "level_source": report.level_source,
+                                         "as_of": report.as_of,
                                          "claims": [c.model_dump() for c in report.claims],
                                          "dissent": report.dissent, "panel_incomplete": report.panel_incomplete},
               idempotency_key=f"{mode}:{report.patient}:{report.as_of}")
 
 
 def run_panel(provider: CaseProvider, model_factory: ModelFactory, audit: AuditLogger,
-              rounds: int = 2) -> tuple[TriageReport, Trace]:
+              rounds: int = 2, level_source: str = "rule_floor") -> tuple[TriageReport, Trace]:
     gw, trace = _gateway(provider, audit), Trace()
     ask = f"Patient {provider.patient}, as of {provider.packet['as_of']}. Assess the next hour."
     grounded: dict[str, Assessment] = {}
@@ -248,16 +272,19 @@ def run_panel(provider: CaseProvider, model_factory: ModelFactory, audit: AuditL
                              "claims": [c.model_dump() for c in claims], "dissent": dissent,
                              "dropped": dropped})
     rule = _rule(provider)
+    final, notes, source, level_errors = _final_level(provider, rule, panel_level, level_source)
     incomplete = bool(trace.parse_errors) or len(grounded) < len(ROLES)
-    report = TriageReport(patient=provider.patient, as_of=provider.packet["as_of"], level=higher(rule, panel_level),
-                          rule_level=rule, panel_level=panel_level, claims=claims, dropped_claims=trace.dropped,
-                          dissent=dissent, scenarios=_scenario_rows(provider), panel_incomplete=incomplete,
-                          errors=trace.parse_errors, quarantined_inputs=sorted(provider.quarantined))
+    report = TriageReport(patient=provider.patient, as_of=provider.packet["as_of"], level=final,
+                          rule_level=rule, panel_level=panel_level, level_source=source, claims=claims,
+                          dropped_claims=trace.dropped, dissent=dissent + notes, scenarios=_scenario_rows(provider),
+                          panel_incomplete=incomplete,
+                          errors=trace.parse_errors + level_errors, quarantined_inputs=sorted(provider.quarantined))
     _record(gw, report, "panel")
     return report, trace
 
 
-def run_single(provider: CaseProvider, model_factory: ModelFactory, audit: AuditLogger) -> tuple[TriageReport, Trace]:
+def run_single(provider: CaseProvider, model_factory: ModelFactory, audit: AuditLogger,
+               level_source: str = "rule_floor") -> tuple[TriageReport, Trace]:
     gw, trace = _gateway(provider, audit), Trace()
     names = ["glucose_summary", "lifestyle_summary", "data_quality", "list_scenarios", "forecast_scenarios"]
     a, retrieved = _run(model_factory("single", 1), f"{BASE} {SINGLE}",
@@ -268,11 +295,13 @@ def run_single(provider: CaseProvider, model_factory: ModelFactory, audit: Audit
     claims, _, leaked = _guard(claims, [], provider.patient, "single")
     dropped = _withhold(dropped, provider.patient) + leaked
     rule = _rule(provider)
-    report = TriageReport(patient=provider.patient, as_of=provider.packet["as_of"], level=higher(rule, level),
-                          rule_level=rule, panel_level=level, claims=claims, dropped_claims=dropped,
-                          dissent=[] if a else ["output unparseable; 'monitor' used"],
+    final, notes, source, level_errors = _final_level(provider, rule, level, level_source)
+    report = TriageReport(patient=provider.patient, as_of=provider.packet["as_of"], level=final,
+                          rule_level=rule, panel_level=level, level_source=source, claims=claims,
+                          dropped_claims=dropped,
+                          dissent=([] if a else ["output unparseable; 'monitor' used"]) + notes,
                           scenarios=_scenario_rows(provider), panel_incomplete=a is None,
-                          errors=trace.parse_errors, quarantined_inputs=sorted(provider.quarantined))
+                          errors=trace.parse_errors + level_errors, quarantined_inputs=sorted(provider.quarantined))
     _record(gw, report, "single")
     return report, trace
 

@@ -121,6 +121,83 @@ same level definitions the labels use. `--model scripted` runs the full loop wit
 replay the rule, so those rows prove the plumbing, not LLM judgment. The eval writes one checkpoint line per case
 (`eval_<model>.cases.jsonl`) and resumes after a kill; `--fresh` starts over.
 
+## 5. Is there signal the rule misses? A learned ceiling, no LLM
+
+`python -m model.cgmacros.ceiling` asks whether the packet holds information beyond the rule. If a classifier
+trained on the packet's numbers cannot beat the rule, no prompt or panel design will. Every 30-min moment of the
+12 people the forecaster never trained on (7 test + 5 validation; 5,590 moments, 256 urgent) becomes the same
+packet the agents see, and its numeric fields are the features (60; the outcome is used only for the label). The rule is
+the real `agents/triage/rules.py`. Logistic regression and gradient-boosted trees, leave-one-participant-out. The
+comparison is at the rule's own specificity, not on accuracy (82% of the pool is routine; 89% of the test people's
+moments). Moments already below 70 or above 250 (177) are kept, as triage must handle them.
+
+**Pre-registered criterion:** "clearly beats the rule" only if, on the 7 test people, the 95% participant-bootstrap
+interval of (classifier − rule) urgent recall at matched specificity excludes 0.
+
+| 7 test people, at the rule's specificity | AUROC | Rule recall | Classifier recall | Difference, 95% CI by person |
+|---|---|---|---|---|
+| Urgent (42, from 3 people), trees | 0.935 | 0.548 | 0.643 | [0.000, 0.333] |
+| Urgent, logistic | 0.878 | 0.548 | 0.524 | [−0.059, 0.333] |
+| At least monitor vs routine (364), trees | 0.878 | 0.670 | 0.728 | [0.003, 0.136] |
+| At least monitor vs routine, logistic | 0.878 | 0.670 | 0.761 | [0.041, 0.131] |
+
+- **Urgent: the pre-registered criterion is not met.** The trees' interval touches 0. On all 12 people the trees
+  catch fewer urgent hours than the rule (0.574 vs 0.625, interval [−0.14, 0.12]), and one person (cgmacros-013)
+  drops from 7/8 to 2/8. So there is **no evidence** the packet supports beating the rule on urgent. That is not
+  evidence of no gain: with 42 urgent hours from 3 people, this test cannot rule out a gain of up to ~30 points.
+- **Routine vs monitor (exploratory, not pre-registered): a modest signal the rule may miss.** At the rule's
+  specificity the classifiers flag 6–9 points more of the hours that needed attention. Of the 8 intervals computed
+  (2 models × with/without cgmacros-035 in training × test/12-person pool), 5 exclude 0, 1 touches 0 and 2 include
+  it. cgmacros-035 is a validation person, so on the test rows "without 035" removes it from training only. This is
+  the boundary where the LLMs failed (they called only 10–22% of routine hours routine). Treat it as a hypothesis to
+  confirm on new people, not a finding.
+- **On the 98 LLM-eval cases** (out-of-fold, thresholds read at the rule's specificity on the test pool; the rebuilt
+  features and rule levels match the agents' packets exactly), the trees score accuracy 0.714, urgent 10/18, routine
+  recall 0.85, under-triage 0.204, over-triage 0.082, beside the rule's 0.694 / 6/18 / 0.925 / 0.265 / 0.041 and the
+  panel's 0.480 / 9/18 / 0.10 / 0.092 / 0.429. The urgent gain looks larger here (6/18 → 10/18, +22 points) than on
+  all 42 urgent test hours (0.548 → 0.643, +10 points), so the 98-case figure should not be quoted alone.
+
+Caveats: the thresholds are read off the evaluation pool (a ROC comparison, not a deployable setting); a deployed
+threshold must be fixed on people outside it. The 5 validation people were used for the forecaster's early stopping,
+so the 12-person rows are mildly optimistic. Results: `model/results/cgmacros_ceiling.json`.
+
+**Reading (a hypothesis):** if the packet holds more than the rule uses, it is most likely at the routine/monitor
+boundary, where a small classifier showed a modest edge and the LLMs over-alarmed instead. Neither the LLMs nor the
+classifier showed a reliable urgent gain. That points to a design where a rule or classifier sets the level and
+the LLM explains it with grounded claims, the same split argued for in recent work (`docs/TRIAGE_LITERATURE.md`).
+
+## 6. Level-setter: the rule keeps urgent, a classifier decides routine vs monitor
+
+`python -m model.cgmacros.levelsetter` (pre-registration in its docstring). Primary policy: urgent if the rule
+says urgent; otherwise a logistic model's P(at least monitor) against a threshold. Nested leave-one-person-out over
+the same 12 people: each person's model *and* threshold come from the other 11. Shipped as plain coefficients in
+`agents/triage/levelsetter_model.json`, scored in pure Python (matches sklearn to 3e-16 on the 98 packets), and
+available in the pipeline only as an opt-in: `run_panel(..., level_source="levelsetter")`. In that mode the LLM
+cannot raise the level, a disagreeing LLM level is shown to the clinician, and any level-setter failure falls back
+to max(rule, LLM) with the error recorded. The default is unchanged.
+
+| 7 test people (3,244 moments, 42 urgent) | Under-triage | Over-triage | **Urgent hours called routine** |
+|---|---|---|---|
+| Rule | 4.16% | 11.71% | **4** |
+| Level-setter (primary, logistic) | 2.87% | 13.44% | **6** |
+| Same policy, boosted trees (secondary) | 2.99% | 15.69% | 4 |
+| max(rule, classifier), never downgrades (secondary) | 2.53% | 21.15% | 3 |
+
+- **The pre-registered criterion is met:** under-triage falls by 1.3 points (95% interval by person 0.46–2.26),
+  over-triage rises 1.7 (limit 5).
+- **But the most dangerous error gets worse.** Of 236 hours the level-setter moved from the rule's "monitor" to
+  "routine", 9 needed attention and 3 were urgent. Urgent hours called routine go from 4 to 6 on the test people,
+  and from 15 to 22 on all 12. The criterion counted every miss equally, so it did not see this. That was a flaw in
+  the criterion, not a reason to ignore the result.
+- The policy that never downgrades has the fewest severe misses (3; 15 → 9 on all 12), but raises over-triage to
+  21%, beyond the limit.
+- Same 12 people as where the signal was found: this shows a deployable version keeps it; it does not confirm it.
+
+**Status:** not the default, and not recommended as is. Fewer misses overall at the price of more urgent hours
+called routine is a trade a clinician must make, not a model. Any fix (for example, no downgrade when the rule's
+"monitor" came from the low side) would be designed after seeing these results, so it must be tested on people
+outside these 12.
+
 ## Limits
 
 - Population: adults without insulin therapy; nothing here transfers to type 1 diabetes.

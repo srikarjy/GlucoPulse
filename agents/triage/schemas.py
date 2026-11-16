@@ -43,9 +43,10 @@ class ScenarioRow(BaseModel):
 class TriageReport(BaseModel):
     patient: str
     as_of: str
-    level: Level                      # final = max(rule floor, panel) -- the panel can raise, never lower
+    level: Level                      # rule_floor: max(rule, panel). levelsetter: level-setter only (see level_source)
     rule_level: Level
-    panel_level: Level
+    panel_level: Level                # the LLM's own level; under levelsetter it is advisory and shown as dissent
+    level_source: Literal["rule_floor", "levelsetter"] = "rule_floor"
     claims: list[Claim]               # grounded claims only
     dropped_claims: list[dict]        # claims removed by grounding, with the reason (audit trail)
     dissent: list[str]
