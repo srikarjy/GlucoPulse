@@ -87,17 +87,39 @@ monitor = > 180, or any reading < 70; routine otherwise (thresholds need clinica
 At most 10 cases per person per outcome; case ids are shuffled. 98 cases: 40 routine, 40 monitor, 18 urgent
 (only 3 of 7 held-out people had a sustained urgent hour). True pool: 2,880 routine, 322 monitor, 42 urgent.
 
-| Method | Accuracy (sample) | Urgent recall [95% CI by person] | Urgent specificity | PPV / NPV at true prevalence (1.3%) | Under-triage |
-|---|---|---|---|---|---|
-| Rule floor | 0.694 | 0.333 [0.00, 0.40] | 0.988 | 0.267 / 0.991 | 0.265 |
-| Single agent | needs a live run | | | | |
-| Panel | needs a live run | | | | |
+Live run: `gpt-4o-mini`, 2026-11-15, all 98 cases, one run (`python -m agents.triage.eval --model openai`).
 
-The rule rarely alarms falsely but misses most urgent hours, and the interval is wide because urgent events come
-from three people. Whether a panel that weighs context does better is what the live run measures; nothing here
-claims it does. A plausible reason for the misses (unlogged meals) is a hypothesis, not a measurement.
-`--model scripted` runs the full loop without an API key; scripted agents replay the rule, so those rows prove the
-plumbing, not LLM judgment. The panel prompt states the same level definitions the labels use.
+| Method | Accuracy (sample) | Routine recall | Urgent recall [95% CI by person] | Urgent specificity | PPV / NPV at true prevalence (1.3%) | Under-triage | Over-triage |
+|---|---|---|---|---|---|---|---|
+| Rule floor | **0.694** | 0.925 | 0.333 (6/18) [0.00, 0.40] | 0.988 | 0.267 / 0.991 | 0.265 | 0.041 |
+| Single agent (live) | 0.531 | 0.225 | 0.444 (8/18) [0.33, 0.50] | 0.950 | 0.104 / 0.992 | 0.112 | 0.357 |
+| Panel (live) | 0.480 | 0.100 | **0.500 (9/18)** [0.33, 0.60] | 0.925 | 0.080 / 0.993 | **0.092** | 0.429 |
+| *Baseline: max(rule, monitor), no LLM* | 0.459 | 0.000 | 0.333 (6/18) [0.00, 0.40] | 0.988 | 0.267 / 0.991 | 0.122 | 0.418 |
+
+**What this shows, and what it does not:**
+
+- **The LLMs mostly answer "monitor".** They call only 10% (panel) and 22% (single) of routine hours routine.
+  Much of their drop in under-triage comes from that default, not from reading the case: the last row is one line
+  of code with no LLM, and it gets most of the way there (under-triage 0.122 vs the panel's 0.092).
+- **Against that baseline, neither LLM method is a measured win.** Paired per case (exact McNemar test on
+  correctness): panel vs baseline 7 cases only the panel got right, 5 only the baseline, p = 0.77; single agent vs
+  baseline 11 / 4, p = 0.12; panel vs single 3 / 8, p = 0.23. The panel is worse than the plain rule on accuracy
+  (17 / 38, p = 0.006), because it over-alarms.
+- **Urgent hours:** the panel catches 3 more than the rule (9 vs 6 of 18) at the cost of 6 urgent false alarms,
+  versus 4 for the single agent. At the real 1.3% prevalence that drops urgent PPV from 0.27 to 0.08. The 18 urgent
+  hours come from 3 people, so the intervals overlap and the extra 3 catches are not evidence.
+- **The panel does not beat a single agent.** It costs 9 model calls per case (882 total, about 53 s per case) vs 1
+  (about 8 s), and is no better on any metric that has an interval.
+- **Grounding is doing real work:** it removed 160 of 359 single-agent claims (45%) and 375 of 821 panel claims (46%)
+  because a number was not in the cited tool output or the wording broke a rule. Panel parse errors: 6 of 882 calls,
+  contained by the fail-safe.
+- **Run-to-run noise:** an earlier interrupted run of the same code and model covered 82 of these cases. Verdicts
+  matched on 74/82 (single) and 76/82 (panel); the remaining 8–10% changed with no change in input.
+
+The rule's misses may come from unlogged meals; that is a hypothesis, not a measurement. The panel prompt states the
+same level definitions the labels use. `--model scripted` runs the full loop without an API key; scripted agents
+replay the rule, so those rows prove the plumbing, not LLM judgment. The eval writes one checkpoint line per case
+(`eval_<model>.cases.jsonl`) and resumes after a kill; `--fresh` starts over.
 
 ## Limits
 
@@ -105,4 +127,6 @@ plumbing, not LLM judgment. The panel prompt states the same level definitions t
 - Triage forecasts assume no new meal; an unlogged meal is invisible (the `history_only` forecast partly offsets this).
 - CGMacros timestamps are randomly shifted by the dataset authors, so one time zone (`UTC`) is used.
 - Sending case packets to a third-party LLM should be checked against the CGMacros licence (CC BY-NC-SA) and any data-use terms first.
-- No live-LLM results yet; until they exist the README does not claim the panel beats anything.
+- One live model (`gpt-4o-mini`), one run, 98 cases, 18 urgent from 3 people. On this evidence the panel does not
+  beat the rule, a single agent, or the max(rule, monitor) baseline. A stronger model, calibrated prompts for the
+  "routine" level, or more urgent cases could change that; none has been tested.
