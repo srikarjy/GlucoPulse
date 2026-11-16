@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import tempfile
 from collections import Counter, defaultdict
@@ -99,9 +100,48 @@ def scripted_factory(provider: CaseProvider):
 
 def openai_factory(model_id: str):
     from agents.reasoning_agent import openai_model
-    import os
     os.environ.setdefault("CLINICAL_AGENT_MODEL_ID", model_id)
     return lambda role, rnd: openai_model()
+
+
+def load_checkpoint(path: Path) -> dict[str, dict]:
+    """Per-case rows already finished. A torn last line (killed mid-write) is ignored."""
+    done = {}
+    if path.exists():
+        for line in path.read_text().splitlines():
+            try:
+                row = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            done[row["id"]] = row
+    return done
+
+
+def append_checkpoint(path: Path, row: dict) -> None:
+    # After a kill mid-write the file ends in a torn line; start a fresh one or this row is lost too.
+    torn = path.exists() and path.stat().st_size > 0 and not path.read_bytes().endswith(b"\n")
+    with path.open("a") as f:
+        f.write(("\n" if torn else "") + json.dumps(row) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def summarize(rows: list[dict], labels: dict, model: str) -> dict:
+    ids = [r["id"] for r in rows]
+    preds = {m: {r["id"]: r[m] for r in rows} for m in ("rule", "single", "panel")}
+    llm = {m: Counter() for m in ("single", "panel")}
+    with_llm = [r for r in rows if r.get("llm")]        # rows imported from an old log carry no LLM stats
+    for r in with_llm:
+        for m, total in llm.items():
+            total.update(r["llm"][m])
+    return {"model": model, "cases": len(ids),
+            "label_counts": dict(Counter(labels[c]["label"] for c in ids)),
+            "pool_sizes": labels.get("_meta", {}).get("pool_sizes"),
+            "methods": {m: score(p, labels) for m, p in preds.items()},
+            "llm_totals": {m: dict(c) for m, c in llm.items()},
+            "llm_totals_cases": len(with_llm),
+            "note": ("scripted mode replays the rule; only the openai run measures LLM triage quality"
+                     if model == "scripted" else "live model run")}
 
 
 def main() -> int:
@@ -110,35 +150,37 @@ def main() -> int:
     ap.add_argument("--model-id", default="gpt-4o-mini")
     ap.add_argument("--limit", type=int, default=0)
     ap.add_argument("--cases", type=Path, default=CASES)
+    ap.add_argument("--fresh", action="store_true", help="discard the per-case checkpoint and start over")
     args = ap.parse_args()
     packets = json.loads((args.cases / "packets.json").read_text())
     labels = json.loads((args.cases / "labels.json").read_text())
     ids = sorted(packets)[: args.limit or None]       # ids are shuffled at build time: not label-ordered
-    preds = {"rule": {}, "single": {}, "panel": {}}
-    llm = {m: Counter() for m in ("single", "panel")}
+    model = args.model if args.model == "scripted" else args.model_id
+    ckpt = args.cases / f"eval_{model}.cases.jsonl"   # one line per finished case, so a killed run resumes
+    if args.fresh and ckpt.exists():
+        ckpt.unlink()
+    done = load_checkpoint(ckpt)
+    todo = [c for c in ids if c not in done]
+    print(f"{len(ids) - len(todo)} cases already in {ckpt.name}; running {len(todo)}", flush=True)
     with tempfile.TemporaryDirectory() as tmp:
         audit = AuditLogger(path=str(Path(tmp) / "audit.jsonl"), pg_dsn=None)
-        for k, cid in enumerate(ids, 1):
+        for k, cid in enumerate(todo, 1):
             provider = CaseProvider(packets[cid])
             factory = scripted_factory(provider) if args.model == "scripted" else openai_factory(args.model_id)
-            preds["rule"][cid] = run_rule(provider)
+            row = {"id": cid, "rule": run_rule(provider), "llm": {}}
             for mode, runner in (("single", run_single), ("panel", run_panel)):
                 report, trace = runner(provider, factory, audit)
-                preds[mode][cid] = report.level
-                llm[mode].update(calls=trace.calls, seconds=round(trace.seconds, 2),
-                                 parse_errors=len(trace.parse_errors), claims_kept=len(report.claims),
-                                 claims_dropped=len(report.dropped_claims),
-                                 raised_above_rule=int(ORDER[report.level] > ORDER[report.rule_level]))
-            print(f"[{k}/{len(ids)}] {cid} label={labels[cid]['label']} rule={preds['rule'][cid]} "
-                  f"single={preds['single'][cid]} panel={preds['panel'][cid]}", flush=True)
-    results = {"model": args.model if args.model == "scripted" else args.model_id, "cases": len(ids),
-               "label_counts": dict(Counter(labels[c]["label"] for c in ids)),
-               "pool_sizes": labels.get("_meta", {}).get("pool_sizes"),
-               "methods": {m: score(p, labels) for m, p in preds.items()},
-               "llm_totals": {m: dict(c) for m, c in llm.items()},
-               "note": ("scripted mode replays the rule; only the openai run measures LLM triage quality"
-                        if args.model == "scripted" else "live model run")}
-    out = args.cases / f"eval_{results['model']}.json"
+                row[mode] = report.level
+                row["llm"][mode] = {"calls": trace.calls, "seconds": round(trace.seconds, 2),
+                                    "parse_errors": len(trace.parse_errors), "claims_kept": len(report.claims),
+                                    "claims_dropped": len(report.dropped_claims),
+                                    "raised_above_rule": int(ORDER[report.level] > ORDER[report.rule_level])}
+            append_checkpoint(ckpt, row)
+            done[cid] = row
+            print(f"[{k}/{len(todo)}] {cid} label={labels[cid]['label']} rule={row['rule']} "
+                  f"single={row['single']} panel={row['panel']}", flush=True)
+    results = summarize([done[c] for c in ids], labels, model)
+    out = args.cases / f"eval_{model}.json"
     out.write_text(json.dumps(results, indent=2) + "\n")
     print(json.dumps(results["methods"], indent=1))
     print(f"-> {out}")

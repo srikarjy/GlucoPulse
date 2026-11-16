@@ -13,4 +13,5 @@ priorauth.db
 demo.db
 data/cgmacros/
 model/artifacts/cgmacros/
+model/artifacts/cgmacros_confirm/
 lightning_logs/
