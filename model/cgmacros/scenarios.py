@@ -84,6 +84,33 @@ class ScenarioForecaster:
                     "p90": r(q[by_group[f"s{i}"], :, hi])} for i, n in enumerate(names)}
 
 
+class HybridMeal:
+    """Meal what-ifs from model/cgmacros/hybrid.py: the no_new_meal forecast plus the fitted Hovorka meal curve.
+
+    Opt-in (cases.py --meal-model hybrid). A bigger meal never forecasts lower and a meal never forecasts below no
+    meal. The p10/p90 band is shifted with the median (its width is not modelled). Fitted on the confirm-split
+    training people (data/cgmacros/triage/hybrid_model_confirm.pkl); see docs/TRIAGE.md section 10."""
+
+    def __init__(self, path=None):
+        from model.cgmacros.cases import OUT
+        with open(path or OUT / "hybrid_model_confirm.pkl", "rb") as fh:
+            self.m = pickle.load(fh)
+
+    def forecast(self, history: pd.DataFrame, no_meal: dict, names: Iterable[str]) -> dict[str, dict]:
+        from model.cgmacros.event import history_features
+        from model.cgmacros.hybrid import X_COLS, gain, meal_basis
+        from model.cgmacros.train import HORIZON
+        hf = history_features(history.tail(ENCODER))
+        x = ((pd.DataFrame([{c: hf[c] for c in X_COLS}]) - self.m["mu"]) / self.m["sd"]).fillna(0).to_numpy()
+        out = {}
+        for n in names:
+            carbs = np.zeros((1, HORIZON))
+            carbs[0, 0] = MEALS[n]["carbs"]
+            add = (gain(x, self.m["params"])[:, None] * meal_basis(carbs, self.m["k"]))[0]
+            out[n] = {q: [round(float(v + a), 1) for v, a in zip(no_meal[q], add)] for q in ("p10", "p50", "p90")}
+        return out
+
+
 def _first_minutes(values: list[float], test) -> int | None:
     for i, v in enumerate(values):
         if test(v):

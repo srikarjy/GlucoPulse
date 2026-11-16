@@ -31,7 +31,7 @@ import numpy as np
 import pandas as pd
 
 from model.cgmacros.dataset import ROOT, build_grid
-from model.cgmacros.scenarios import MENU, ScenarioForecaster, scenario_resource
+from model.cgmacros.scenarios import MENU, HybridMeal, ScenarioForecaster, scenario_resource
 from model.cgmacros.splits import split_participants
 from model.cgmacros.train import ENCODER, HORIZON
 
@@ -105,6 +105,9 @@ def main() -> int:
     ap.add_argument("--per-label", type=int, default=40)
     ap.add_argument("--cap", type=int, default=10, help="max cases per participant per label")
     ap.add_argument("--variant", default="meals_activity")   # most accurate in the ablation
+    ap.add_argument("--meal-model", choices=("tft", "hybrid"), default="tft",
+                    help="meal what-ifs from the forecaster (default; the level-setter was trained on these) or the "
+                         "hybrid no-meal + Hovorka meal curve (docs/TRIAGE.md section 10)")
     args = ap.parse_args()
     grid = build_grid()
     _, _, test_ids = split_participants(sorted(grid.participant.unique()))
@@ -126,6 +129,7 @@ def main() -> int:
                 chosen.append((label, p, g, i))
     rng.shuffle(chosen)                          # ids no longer sorted by label
     meal_model, history_model = ScenarioForecaster(args.variant), ScenarioForecaster("glucose")
+    hybrid = HybridMeal() if args.meal_model == "hybrid" else None
     packets, labels = {}, {"_meta": {"pool_sizes": {k: len(v) for k, v in pools.items()},
                                      "cap_per_participant_per_label": args.cap, "sustain_minutes": SUSTAIN * 5}}
     flags = 0
@@ -133,6 +137,8 @@ def main() -> int:
         hist = g.iloc[i - ENCODER + 1:i + 1]
         as_of = hist["ts"].iloc[-1].isoformat()
         q = meal_model.forecast(hist, MENU)
+        if hybrid is not None:
+            q.update(hybrid.forecast(hist, q["no_new_meal"], ["meal_30g_now", "meal_60g_now"]))
         q["history_only"] = history_model.forecast(hist, ["no_new_meal"])["no_new_meal"]
         scen = {n: scenario_resource(p, as_of, n, q[n], args.variant if n != "history_only" else "glucose")
                 for n in q}

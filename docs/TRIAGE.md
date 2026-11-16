@@ -345,6 +345,66 @@ over 89 days.
 in line with consumer CGM alerts. Adding it to the rule failed the false-alarm limit set in advance. Next:
 pre-register the 5-min event model, or the rule OR the event model, with the same two criteria.
 
+## 10. Hybrid meal what-if: the no-meal forecast plus a physiological meal curve (passed)
+
+**The problem.** The forecaster learned meals from data alone. Its meal what-ifs were not physiologically
+consistent:
+- A meal forecast dipped below the no-meal forecast in 44% of the windows below.
+- In case-021 a 30 g meal forecast higher than a 60 g meal.
+
+**The idea.** From Apple's Miller, Foti and Fox (2020, arXiv:2008.02852): keep a physiological model's structure and
+let a learned model set its parameters. CGMacros has no insulin data, so only the meal part is used.
+
+`model/cgmacros/hybrid.py` builds each meal forecast as:
+- **The no-meal forecast**, unchanged.
+- **Plus the meal's carbs passed through the Hovorka gut-absorption curve** (time constant 40 min), with a
+  glucose-clearance rate fitted on training people. The fitted rate is 0.02/min.
+- **Scaled by a non-negative gain**, set from the 2 hours of history.
+
+By construction a bigger meal never forecasts lower, and a meal never forecasts below no meal
+(`tests/model_cgmacros/test_hybrid.py`).
+
+**The test.** The protocol was committed (`8139885`) before any held-out output existed:
+- **Windows:** every logged meal, with `as_of` 5 min before it.
+- **Inputs:** both arms get that hour's logged meals, through the decoder triage uses (no oracle activity).
+- **Fitting:** on the 31 confirm-split training people.
+- **Primary:** on the 9 new people, the hybrid is non-inferior to the forecaster at T+60 if the upper 95%
+  person-bootstrap bound of the RMSE difference is below +2.0 mg/dL.
+
+| Meal windows | Forecaster (D) T+60 RMSE | Hybrid | Hybrid, personalized | Hybrid - D, 95% CI | No-meal forecast |
+|---|---|---|---|---|---|
+| **9 new people (pre-registered)**, 327 meals | 39.9 | **35.7** | 33.2 | -4.1 [-8.4, +0.6] | 48.0 |
+| All 14 held-out people (secondary), 485 meals | 41.4 | 36.4 | 35.1 | -4.9 [-8.9, -1.0] | 51.5 |
+
+- **Pre-registered result: passed (non-inferior).** The upper bound, +0.6, is below the +2.0 margin.
+- **Better, not just non-inferior?** On the 9 new people the interval still includes 0. The secondary results lean
+  that way:
+  - Averaged over the hour: hybrid 25.3 vs D 27.4, CI [-3.9, -0.3].
+  - On all 14 people the T+60 interval excludes 0.
+- **Personalized gain (secondary).** This scales the gain by the person's response to earlier meals, using only meals
+  whose hour had ended. It reached 33.2, CI vs D [-11.5, -3.1]. That is the closest analogue of the Apple paper's
+  per-person dynamics, but no criterion was set for it, so it is a candidate, not a finding.
+- **What-if consistency:**
+  - The hybrid's meal forecast fell below no-meal in 0% of windows; D's did in 44% (9 new) and 48% (14).
+  - On a live window for a new person: D forecast 110.9 for a 30 g meal and 110.8 for 60 g at +30 min. The hybrid
+    gave 105.7 and 109.8.
+- **Calibration of the rise over no-meal at +60 (9 new people):**
+  - 50-70 g meals: observed +47, hybrid +45, D +25. D under-predicts large meals by half.
+  - 20-40 g meals: observed +20, hybrid +13, D +16. The hybrid is linear in carbs, so it under-predicts small meals.
+- **Read with care:**
+  - D's T+60 RMSE here (40) is higher than in §1 (28.5). These windows start right at a meal and use the triage
+    decoder, not the oracle activity of §1.
+  - The cross-validation loss over the clearance-rate grid was not smooth: 0.01 scored worse than 0 and 0.02. The
+    fit may have local optima.
+  - The gain was fitted on residuals from people the forecaster trained on.
+  - The p10-p90 band is shifted with the median. Its width is not modelled.
+
+**Status:** available, not the default. `python -m model.cgmacros.cases --meal-model hybrid` builds packets whose meal
+what-ifs come from the hybrid (`scenarios.HybridMeal`). The default stays the forecaster, because the level-setter
+(§6) takes the meal scenarios as features (`agents/triage/features.py`). Switching would change triage levels and
+needs the level-setter retrained and re-tested. Triage levels from the rule (no-meal and history-only forecasts) are
+unaffected either way.
+
 ## Limits
 
 - Population: adults without insulin therapy; nothing here transfers to type 1 diabetes.

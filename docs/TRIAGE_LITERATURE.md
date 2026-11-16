@@ -89,6 +89,24 @@ read from the full text; "abstract" means only the abstract was seen. Searched 2
   when glucose was ~21 mg/dL above baseline. *Relevance:* the time scale: a meal is visible on the CGM within ~30 min,
   long before a spike peaks, which is why checking every 5 min matters more than a better one-off model.
 
+## 7. Physiology-structured forecasting (the meal what-if)
+
+- **Miller, Foti, Fox (Apple), MLHC 2020, arXiv:2008.02852, "Learning Insulin-Glucose Dynamics in the Wild."**
+  *Read (methods, results).*
+  - **Method:** the UVA/Padova type 1 diabetes simulator, with its parameters (insulin sensitivity, endogenous glucose
+    production) allowed to vary over time, driven by a latent sequence model ("DTD-Sim").
+  - **Data:** 2 people with type 1 diabetes, CGM plus pump data from HealthKit, about 150 days each.
+  - **Accuracy:** LSTM and ARMA were best at 5-30 min. DTD-Sim beat the LSTM by 5% at 1 h, 27% at 2 h and 36% at
+    6 h.
+  - **What-if forecasts:** the LSTM ignored insulin; DTD-Sim responded plausibly to both carbs and insulin.
+  - *Relevance:* our meal what-ifs have the LSTM's problem (meal forecasts dipping below no-meal; 30 g above 60 g).
+    `model/cgmacros/hybrid.py` keeps only the meal part, since CGMacros has no insulin. Expect a fix to the what-if
+    forecasts, not much accuracy gain at 60 min.
+- **Hovorka et al., Physiol Meas (2004), doi:10.1088/0967-3334/25/4/010.** *Abstract; equations via Pompa et al.
+  2021, doi:10.1371/journal.pone.0257789 (read).* Gut absorption is a two-compartment chain:
+  `U_G(t) = D2(t) / tau_D`, `tau_D = 40 min`, carbohydrate bioavailability `A_G = 0.8`. This is the fixed meal-curve
+  shape in the hybrid.
+
 ## What this suggests for the panel
 
 1. The level should come from a rule or a small classifier (section 5 of `TRIAGE.md`), not from the LLM vote.

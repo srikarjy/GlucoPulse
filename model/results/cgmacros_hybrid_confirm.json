@@ -1,0 +1,167 @@
+{
+ "scheme": "confirm",
+ "preregistration": "(written 2026-11-16, before any hybrid output for held-out people was computed):\n  Windows     every logged meal (carbs > 0) of a person: as_of = the reading 5 min before the meal; 2 h of contiguous\n              history and a fully observed next hour required. Both arms get every meal logged in that hour, at its\n              step, with the deployment decoder (scenarios.future_frame: METs 1.0, heart rate held, no oracle activity).\n  Arms        D      the confirm-split TFT (variant meals_activity) given the meals' carbs, protein, fat and fiber.\n              hybrid D's no-meal forecast + S(x) * carbs * e(t), carbs only.\n  Fitting     on the 31 confirm training people only: residual = actual - D_no_meal, least squares on all 12 steps,\n              ridge 1.0 on w; k in {0, 0.005, 0.01, 0.02, 0.04} per min chosen by 5-fold GroupKFold (by person) loss.\n              (D trained on these people, so their residuals are a little smaller than on new people.)\n  Primary     the global-S hybrid, on the 9 NEW people: T+60 RMSE(hybrid) - RMSE(D), 95% person-bootstrap interval;\n              non-inferior if the upper bound is < +2.0 mg/dL (D's meal-hour T+60 RMSE was 28.5 on the primary split).\n              With 9 people the interval may be wide; an interval spanning the margin is inconclusive, not a failure\n              of the property the hybrid guarantees.\n  Secondary   RMSE averaged over the hour; the same on all 14 held-out people (9 new + 5 early-stopping); calibration:\n              mean predicted vs observed rise over no-meal at +60 for meals of 20-40 g and 50-70 g; D's own violations\n              on these windows (meal forecast below no-meal at any step); a personalized gain (S scaled by the\n              person's earlier meals, only windows that ended before as_of, shrunk to 1 with 2 pseudo-meals).\n  Not changed triage levels: the rule reads no_new_meal and history_only, not the meal scenarios. The hybrid would\n              change only the meal what-if numbers agents and clinicians see, and only after this test.",
+ "fit": {
+  "k_per_min": 0.02,
+  "cv_mse_by_k": {
+   "0.0": 770.0953788921818,
+   "0.005": 772.2868207426831,
+   "0.01": 828.911796915998,
+   "0.02": 763.0469366805369,
+   "0.04": 813.5776109843099
+  },
+  "params": [
+   0.4407,
+   -0.189,
+   0.3574,
+   -0.2041,
+   0.0577,
+   0.3256,
+   -0.0393,
+   -0.7244
+  ],
+  "features": [
+   "now",
+   "mean2h",
+   "sd2h",
+   "d30",
+   "hour_sin",
+   "hour_cos",
+   "carbs2h"
+  ],
+  "train_windows": 1068
+ },
+ "train_in_sample": {
+  "windows": 1068,
+  "people": 31,
+  "t60_rmse": {
+   "D": 41.47,
+   "hybrid": 39.58,
+   "hybrid_personal": 36.27,
+   "D_no_meal": 50.96
+  },
+  "t60_diff_hybrid_minus_D_ci95": [
+   -4.19,
+   0.62
+  ],
+  "t60_diff_personal_minus_D_ci95": [
+   -7.14,
+   -3.2
+  ],
+  "hour_rmse": {
+   "D": 27.8,
+   "hybrid": 26.75,
+   "hybrid_personal": 24.84,
+   "D_no_meal": 34.13
+  },
+  "hour_diff_hybrid_minus_D_ci95": [
+   -1.88,
+   -0.19
+  ],
+  "calibration": {
+   "20-40g": {
+    "n": 238,
+    "observed_rise_over_no_meal_t60": 23.6,
+    "hybrid": 13.4,
+    "D": 19.6
+   },
+   "50-70g": {
+    "n": 257,
+    "observed_rise_over_no_meal_t60": 43.5,
+    "hybrid": 45.7,
+    "D": 25.6
+   }
+  },
+  "D_meal_below_no_meal_any_step": 0.467,
+  "hybrid_meal_below_no_meal_any_step": 0.0
+ },
+ "new_9_people": {
+  "windows": 327,
+  "people": 9,
+  "t60_rmse": {
+   "D": 39.85,
+   "hybrid": 35.72,
+   "hybrid_personal": 33.21,
+   "D_no_meal": 48.04
+  },
+  "t60_diff_hybrid_minus_D_ci95": [
+   -8.37,
+   0.59
+  ],
+  "t60_diff_personal_minus_D_ci95": [
+   -11.47,
+   -3.1
+  ],
+  "hour_rmse": {
+   "D": 27.38,
+   "hybrid": 25.33,
+   "hybrid_personal": 23.82,
+   "D_no_meal": 33.56
+  },
+  "hour_diff_hybrid_minus_D_ci95": [
+   -3.87,
+   -0.27
+  ],
+  "calibration": {
+   "20-40g": {
+    "n": 72,
+    "observed_rise_over_no_meal_t60": 20.2,
+    "hybrid": 12.8,
+    "D": 16.4
+   },
+   "50-70g": {
+    "n": 81,
+    "observed_rise_over_no_meal_t60": 47.3,
+    "hybrid": 44.7,
+    "D": 24.6
+   }
+  },
+  "D_meal_below_no_meal_any_step": 0.443,
+  "hybrid_meal_below_no_meal_any_step": 0.0
+ },
+ "all_14_people": {
+  "windows": 485,
+  "people": 14,
+  "t60_rmse": {
+   "D": 41.36,
+   "hybrid": 36.42,
+   "hybrid_personal": 35.09,
+   "D_no_meal": 51.47
+  },
+  "t60_diff_hybrid_minus_D_ci95": [
+   -8.94,
+   -1.01
+  ],
+  "t60_diff_personal_minus_D_ci95": [
+   -10.81,
+   -2.63
+  ],
+  "hour_rmse": {
+   "D": 29.74,
+   "hybrid": 27.07,
+   "hybrid_personal": 25.69,
+   "D_no_meal": 37.03
+  },
+  "hour_diff_hybrid_minus_D_ci95": [
+   -4.22,
+   -1.25
+  ],
+  "calibration": {
+   "20-40g": {
+    "n": 110,
+    "observed_rise_over_no_meal_t60": 19.1,
+    "hybrid": 13.2,
+    "D": 17.7
+   },
+   "50-70g": {
+    "n": 120,
+    "observed_rise_over_no_meal_t60": 51.8,
+    "hybrid": 46.2,
+    "D": 23.8
+   }
+  },
+  "D_meal_below_no_meal_any_step": 0.482,
+  "hybrid_meal_below_no_meal_any_step": 0.0
+ },
+ "primary_non_inferior": true
+}
