@@ -38,10 +38,17 @@ def p_at_least_monitor(packet: dict, m: dict | None = None) -> float:
     return p_at_least_monitor_from_vector([f[k] for k in m["features"]], m)
 
 
+GUARD_MIN_2H = 80.0   # pre-registered and confirmed on 9 new people (model/cgmacros/confirm.py)
+
+
 def set_level(packet: dict, rule: Level, m: dict | None = None) -> tuple[Level, float]:
-    """Final level and the model probability behind it. A rule 'urgent' is never lowered."""
+    """Final level and the model probability behind it. A rule 'urgent' is never lowered, and a rule 'monitor' is
+    never lowered when the lowest reading of the past 2 h was below 80 mg/dL (the guard against calling an urgent
+    hour routine)."""
     m = m or load()
     p = p_at_least_monitor(packet, m)
     if rule == "urgent":
         return "urgent", p
+    if rule == "monitor" and packet["glucose_summary"]["min_2h_mg_dl"] < GUARD_MIN_2H:
+        return "monitor", p
     return ("monitor" if p >= m["threshold_at_least_monitor"] else "routine"), p

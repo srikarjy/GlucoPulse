@@ -45,8 +45,15 @@ def test_rule_urgent_is_never_lowered():
 
 @pytest.mark.parametrize("rule", ["routine", "monitor"])
 def test_below_urgent_the_model_decides(rule):
-    level, p = set_level(full_packet(), rule)
+    level, p = set_level(full_packet(), rule)        # 2-h minimum is 98: the guard does not apply
     assert level == ("monitor" if p >= load()["threshold_at_least_monitor"] else "routine")
+
+
+def test_guard_blocks_downgrade_after_a_recent_near_low():
+    pk = full_packet()
+    pk["glucose_summary"]["min_2h_mg_dl"] = 79.0
+    assert set_level(pk, "monitor")[0] == "monitor"
+    assert set_level(pk, "routine")[0] in ("routine", "monitor")   # the guard only stops downgrades
 
 
 def test_opt_in_mode_llm_cannot_raise_and_disagreement_is_shown(tmp_path):

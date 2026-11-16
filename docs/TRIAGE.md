@@ -193,10 +193,44 @@ to max(rule, LLM) with the error recorded. The default is unchanged.
   21%, beyond the limit.
 - Same 12 people as where the signal was found: this shows a deployable version keeps it; it does not confirm it.
 
-**Status:** not the default, and not recommended as is. Fewer misses overall at the price of more urgent hours
-called routine is a trade a clinician must make, not a model. Any fix (for example, no downgrade when the rule's
-"monitor" came from the low side) would be designed after seeing these results, so it must be tested on people
-outside these 12.
+**Status of this unguarded version:** not recommended. A guard designed on these 12 people was then tested on new
+people (section 7).
+
+## 7. Confirmation on 9 new people: the guarded level-setter
+
+The unguarded downgrades that turned urgent hours into "routine" were almost all hours whose lowest reading in the
+past 2 hours was near 70. The **guard** therefore blocks any monitor→routine downgrade when that 2-hour minimum is
+below 80 mg/dL. Chosen on the 12 people above (post hoc there), so it was tested on people nothing had been
+designed on:
+
+- **Split** (`CGMACROS_SPLIT=confirm`): 9 people drawn at random (seed 2026) from the forecaster's original
+  *training* people; the forecaster was retrained on 31 others (5 more for early stopping only).
+- **Pre-registration** (`model/cgmacros/confirm.py`) committed in `b4b033a` *before* any forecast or outcome of the
+  9 people was computed: the policy, the model, the protocol (nested leave-one-person-out over the 14 people the new
+  forecaster never trained on) and three criteria, all required.
+
+| 9 new people (4,176 moments; 88 urgent hours from 6 people) | Under-triage | Over-triage | Urgent hours called routine |
+|---|---|---|---|
+| Rule | 4.38% | 9.60% | 7 |
+| **Guarded level-setter** | **2.97%** | 11.69% | **4** |
+| Unguarded (replication of section 6) | 3.02% | 10.68% | 6 |
+
+**All three pre-registered criteria are met:** under-triage falls 1.4 points (95% interval by person 0.74–2.27),
+over-triage rises 2.1 points (limit 5), and urgent hours called routine fall from 7 to 4. On all 14 people the
+guarded policy calls 10 urgent hours routine against the rule's 17; unguarded, it is 18. The guard costs about one
+point of over-triage and removes most of the dangerous downgrades.
+
+Read with care:
+- Counts of urgent hours called routine are small (7 vs 4) and have no interval; criterion 3 says "no worse",
+  not "proven better".
+- The shipped model (`agents/triage/levelsetter_model.json`) was trained on the primary 12 with the primary
+  forecaster; this confirms the *policy*, retrained the same way, on new people. The guard is now part of the
+  shipped scorer.
+- One dataset (CGMacros, adults without insulin). The thresholds are not clinically validated.
+
+**Status:** the guarded level-setter is confirmed on people it was not designed on, and is available with
+`level_source="levelsetter"`. It is **not** the default: fewer misses overall for ~2 points more alarms is a trade
+for a clinician to accept. In that mode the LLM explains and cannot raise the level.
 
 ## Limits
 

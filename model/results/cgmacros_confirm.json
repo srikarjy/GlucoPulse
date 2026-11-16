@@ -1,0 +1,321 @@
+{
+ "preregistration": "(written 2026-11-16, before any forecast or label of the 9 new people was computed):\n  Primary policy  \"guarded\": urgent if the rule says urgent; else if the rule says monitor and the lowest reading of\n                  the past 2 h is below 80 mg/dL, monitor (no downgrade); else monitor if the logistic model's\n                  P(at least monitor) >= t_m, otherwise routine. The 80 mg/dL guard was chosen on the primary 12\n                  people (it is post hoc there), which is why it is tested here.\n  Model/protocol  multinomial logistic regression, nested leave-one-participant-out over the 14 people the new\n                  forecaster never trained on (9 new + 5 early-stopping people): model and t_m come only from\n                  the other 13.\n  Criteria        on the 9 NEW people, versus the rule, ALL of:\n                    1. under-triage lower, with the 95% participant-bootstrap interval of the reduction excluding 0;\n                    2. over-triage at most 5 points higher;\n                    3. no more urgent hours called routine than the rule.\n  Secondary       the unguarded policy (replication of model/cgmacros/levelsetter.py); everything on all 14 people.",
+ "new_people": [
+  "cgmacros-003",
+  "cgmacros-008",
+  "cgmacros-009",
+  "cgmacros-014",
+  "cgmacros-016",
+  "cgmacros-017",
+  "cgmacros-038",
+  "cgmacros-043",
+  "cgmacros-045"
+ ],
+ "labels_new": {
+  "routine": 3690,
+  "monitor": 398,
+  "urgent": 88
+ },
+ "guarded": {
+  "new_9_people": {
+   "n": 4176,
+   "accuracy": 0.853,
+   "under_triage": 0.0297,
+   "over_triage": 0.1169,
+   "rule_under_triage": 0.0438,
+   "rule_over_triage": 0.096,
+   "under_reduction_ci95_by_person": [
+    0.0074,
+    0.0227
+   ],
+   "over_increase_ci95_by_person": [
+    -0.0162,
+    0.0627
+   ],
+   "severe_under_triage_urgent_called_routine": 4,
+   "rule_severe_under_triage_urgent_called_routine": 7,
+   "urgent_recall": 0.705,
+   "routine_recall": 0.874,
+   "monitor_recall": 0.754,
+   "downgrades_rule_monitor_to_routine": 211,
+   "downgrades_that_needed_attention": 6,
+   "downgrades_that_were_urgent": 1,
+   "downgrades_by_person": {
+    "cgmacros-003": {
+     "downgrades": 44,
+     "needed_attention": 0
+    },
+    "cgmacros-008": {
+     "downgrades": 33,
+     "needed_attention": 2
+    },
+    "cgmacros-009": {
+     "downgrades": 25,
+     "needed_attention": 0
+    },
+    "cgmacros-014": {
+     "downgrades": 29,
+     "needed_attention": 0
+    },
+    "cgmacros-016": {
+     "downgrades": 14,
+     "needed_attention": 0
+    },
+    "cgmacros-017": {
+     "downgrades": 6,
+     "needed_attention": 0
+    },
+    "cgmacros-038": {
+     "downgrades": 18,
+     "needed_attention": 1
+    },
+    "cgmacros-043": {
+     "downgrades": 22,
+     "needed_attention": 1
+    },
+    "cgmacros-045": {
+     "downgrades": 20,
+     "needed_attention": 2
+    }
+   },
+   "upgrades": 360
+  },
+  "all_14_people": {
+   "n": 6502,
+   "accuracy": 0.839,
+   "under_triage": 0.0435,
+   "over_triage": 0.1172,
+   "rule_under_triage": 0.0541,
+   "rule_over_triage": 0.1007,
+   "under_reduction_ci95_by_person": [
+    0.0056,
+    0.0169
+   ],
+   "over_increase_ci95_by_person": [
+    -0.0092,
+    0.046
+   ],
+   "severe_under_triage_urgent_called_routine": 10,
+   "rule_severe_under_triage_urgent_called_routine": 17,
+   "urgent_recall": 0.65,
+   "routine_recall": 0.869,
+   "monitor_recall": 0.788,
+   "downgrades_rule_monitor_to_routine": 329,
+   "downgrades_that_needed_attention": 20,
+   "downgrades_that_were_urgent": 2,
+   "downgrades_by_person": {
+    "cgmacros-003": {
+     "downgrades": 44,
+     "needed_attention": 0
+    },
+    "cgmacros-008": {
+     "downgrades": 33,
+     "needed_attention": 2
+    },
+    "cgmacros-009": {
+     "downgrades": 25,
+     "needed_attention": 0
+    },
+    "cgmacros-010": {
+     "downgrades": 34,
+     "needed_attention": 1
+    },
+    "cgmacros-011": {
+     "downgrades": 20,
+     "needed_attention": 1
+    },
+    "cgmacros-014": {
+     "downgrades": 29,
+     "needed_attention": 0
+    },
+    "cgmacros-016": {
+     "downgrades": 14,
+     "needed_attention": 0
+    },
+    "cgmacros-017": {
+     "downgrades": 6,
+     "needed_attention": 0
+    },
+    "cgmacros-026": {
+     "downgrades": 24,
+     "needed_attention": 2
+    },
+    "cgmacros-035": {
+     "downgrades": 10,
+     "needed_attention": 7
+    },
+    "cgmacros-036": {
+     "downgrades": 30,
+     "needed_attention": 3
+    },
+    "cgmacros-038": {
+     "downgrades": 18,
+     "needed_attention": 1
+    },
+    "cgmacros-043": {
+     "downgrades": 22,
+     "needed_attention": 1
+    },
+    "cgmacros-045": {
+     "downgrades": 20,
+     "needed_attention": 2
+    }
+   },
+   "upgrades": 512
+  }
+ },
+ "unguarded": {
+  "new_9_people": {
+   "n": 4176,
+   "accuracy": 0.863,
+   "under_triage": 0.0302,
+   "over_triage": 0.1068,
+   "rule_under_triage": 0.0438,
+   "rule_over_triage": 0.096,
+   "under_reduction_ci95_by_person": [
+    0.0067,
+    0.0227
+   ],
+   "over_increase_ci95_by_person": [
+    -0.032,
+    0.0556
+   ],
+   "severe_under_triage_urgent_called_routine": 6,
+   "rule_severe_under_triage_urgent_called_routine": 7,
+   "urgent_recall": 0.705,
+   "routine_recall": 0.885,
+   "monitor_recall": 0.749,
+   "downgrades_rule_monitor_to_routine": 257,
+   "downgrades_that_needed_attention": 10,
+   "downgrades_that_were_urgent": 3,
+   "downgrades_by_person": {
+    "cgmacros-003": {
+     "downgrades": 50,
+     "needed_attention": 0
+    },
+    "cgmacros-008": {
+     "downgrades": 63,
+     "needed_attention": 5
+    },
+    "cgmacros-009": {
+     "downgrades": 29,
+     "needed_attention": 1
+    },
+    "cgmacros-014": {
+     "downgrades": 29,
+     "needed_attention": 0
+    },
+    "cgmacros-016": {
+     "downgrades": 14,
+     "needed_attention": 0
+    },
+    "cgmacros-017": {
+     "downgrades": 9,
+     "needed_attention": 0
+    },
+    "cgmacros-038": {
+     "downgrades": 18,
+     "needed_attention": 1
+    },
+    "cgmacros-043": {
+     "downgrades": 22,
+     "needed_attention": 1
+    },
+    "cgmacros-045": {
+     "downgrades": 23,
+     "needed_attention": 2
+    }
+   },
+   "upgrades": 360
+  },
+  "all_14_people": {
+   "n": 6502,
+   "accuracy": 0.85,
+   "under_triage": 0.0438,
+   "over_triage": 0.1061,
+   "rule_under_triage": 0.0541,
+   "rule_over_triage": 0.1007,
+   "under_reduction_ci95_by_person": [
+    0.0052,
+    0.0167
+   ],
+   "over_increase_ci95_by_person": [
+    -0.0257,
+    0.0387
+   ],
+   "severe_under_triage_urgent_called_routine": 18,
+   "rule_severe_under_triage_urgent_called_routine": 17,
+   "urgent_recall": 0.65,
+   "routine_recall": 0.882,
+   "monitor_recall": 0.786,
+   "downgrades_rule_monitor_to_routine": 411,
+   "downgrades_that_needed_attention": 30,
+   "downgrades_that_were_urgent": 10,
+   "downgrades_by_person": {
+    "cgmacros-003": {
+     "downgrades": 50,
+     "needed_attention": 0
+    },
+    "cgmacros-008": {
+     "downgrades": 63,
+     "needed_attention": 5
+    },
+    "cgmacros-009": {
+     "downgrades": 29,
+     "needed_attention": 1
+    },
+    "cgmacros-010": {
+     "downgrades": 42,
+     "needed_attention": 1
+    },
+    "cgmacros-011": {
+     "downgrades": 20,
+     "needed_attention": 1
+    },
+    "cgmacros-014": {
+     "downgrades": 29,
+     "needed_attention": 0
+    },
+    "cgmacros-016": {
+     "downgrades": 14,
+     "needed_attention": 0
+    },
+    "cgmacros-017": {
+     "downgrades": 9,
+     "needed_attention": 0
+    },
+    "cgmacros-026": {
+     "downgrades": 31,
+     "needed_attention": 2
+    },
+    "cgmacros-035": {
+     "downgrades": 10,
+     "needed_attention": 7
+    },
+    "cgmacros-036": {
+     "downgrades": 51,
+     "needed_attention": 9
+    },
+    "cgmacros-038": {
+     "downgrades": 18,
+     "needed_attention": 1
+    },
+    "cgmacros-043": {
+     "downgrades": 22,
+     "needed_attention": 1
+    },
+    "cgmacros-045": {
+     "downgrades": 23,
+     "needed_attention": 2
+    }
+   },
+   "upgrades": 512
+  }
+ },
+ "criteria": {
+  "1_under_triage_reduction_excludes_0": true,
+  "2_over_triage_increase_at_most_5_points": true,
+  "3_no_more_urgent_called_routine": true
+ },
+ "confirmed": true
+}
