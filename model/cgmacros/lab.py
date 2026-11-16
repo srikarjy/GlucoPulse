@@ -309,6 +309,102 @@ def t_blend_hgb_lp_tftA(train, dev):
 
 TRIALS.update({"hgb_big_long_person": t_hgb_big_long_person, "blend_hgb_lp_tftA": t_blend_hgb_lp_tftA})
 
+# ---------------------------------------------------------------- retrieval: the person's own similar past moments
+KNN = ["knn_d30", "knn_d60", "knn_dist", "knn_n"]
+
+
+def knn_features(df: pd.DataFrame, k: int = 20) -> pd.DataFrame:
+    """For each window, the k most similar EARLIER windows of the same person whose next hour had fully passed by
+    as_of (time_idx_j + 12 <= time_idx_i). Similarity: Euclidean on the 2-h shape (lags) plus the level (now / 2).
+    Returns their mean change at +30 and +60 min, mean distance, and how many candidates existed."""
+    lag_cols = [f"lag{j}" for j in range(ENCODER)]
+    res = pd.DataFrame(np.nan, index=df.index, columns=KNN)
+    for _, w in df.groupby("participant", sort=False):
+        w = w.sort_values("time_idx")
+        Z = np.c_[w[lag_cols].to_numpy(float), w["now"].to_numpy(float)[:, None] / 2.0]
+        Y = stack(w.y) - w["now"].to_numpy()[:, None]
+        t = w["time_idx"].to_numpy()
+        avail = np.searchsorted(t, t - HORIZON, side="right")      # windows [0, avail) have finished hours
+        for s in range(0, len(w), 512):
+            e = min(s + 512, len(w))
+            m = int(avail[e - 1])
+            if m == 0:
+                continue
+            D = np.sqrt(((Z[s:e, None, :] - Z[None, :m, :]) ** 2).sum(-1))
+            D[np.arange(m)[None, :] >= avail[s:e, None]] = np.inf
+            nn = np.argsort(D, 1)[:, :k]
+            dn = np.take_along_axis(D, nn, 1)
+            ok = np.isfinite(dn)
+            cnt = ok.sum(1)
+            w30 = np.where(ok, Y[nn, S30], 0).sum(1)
+            w60 = np.where(ok, Y[nn, S60], 0).sum(1)
+            with np.errstate(invalid="ignore", divide="ignore"):
+                res.loc[w.index[s:e], "knn_d30"] = np.where(cnt > 0, w30 / cnt, np.nan)
+                res.loc[w.index[s:e], "knn_d60"] = np.where(cnt > 0, w60 / cnt, np.nan)
+                res.loc[w.index[s:e], "knn_dist"] = np.where(cnt > 0, np.where(ok, dn, 0).sum(1) / cnt, np.nan)
+            res.loc[w.index[s:e], "knn_n"] = np.minimum(avail[s:e], k)
+    return res
+
+
+def t_hgb_long_person_knn(train, dev):
+    global FEATURES
+    base = FEATURES
+    tr, dv = _with(train, dev, LONG + PERSON)
+    for d in (tr, dv):
+        d[KNN] = knn_features(d)[KNN].to_numpy()
+    FEATURES = base + LONG + PERSON + KNN
+    try:
+        med = _per_step(_hgb, tr, dv, (S30, S60))
+        return (med, *_band(tr, med, _hgb, (S30, S60)))
+    finally:
+        FEATURES = base
+
+
+TRIALS["hgb_long_person_knn"] = t_hgb_long_person_knn
+
+# ---------------------------------------------------------------- Chronos (runs in .venv-chronos; see chronos_run.py)
+CTX_LEN = 512                                         # ~42 h of 5-min readings; gaps are NaN
+CTX_FILE = OUT / "lab_dev_context.npy"
+
+
+def export_context() -> None:
+    """Glucose up to and including as_of for every dev window (same row order as the cache), NaN in gaps."""
+    c = pd.read_pickle(CACHE)
+    grid = build_grid()
+    out = np.full((len(c["dev"]), CTX_LEN), np.nan, dtype=np.float32)
+    for p, w in c["dev"].groupby("participant"):
+        g = grid[grid.participant == p].set_index("time_idx")["glucose"]
+        lo = int(g.index.min())
+        s = g.reindex(range(lo, int(g.index.max()) + 1)).to_numpy(np.float32)
+        pad = np.r_[np.full(CTX_LEN, np.nan, np.float32), s]
+        for row, t in zip(w.index, w.time_idx):
+            end = int(t) - lo + CTX_LEN + 1                  # one past as_of in the padded series
+            out[row] = pad[end - CTX_LEN:end]
+    assert np.allclose(out[:, -1], c["dev"]["now"].to_numpy()), "context does not end at as_of"
+    np.save(CTX_FILE, out)
+    print(f"context {out.shape} -> {CTX_FILE}")
+
+
+def _chronos(name):
+    def trial(train, dev):
+        q = np.load(OUT / f"lab_pred_{name}.npy")             # (n, 12, 3): p10, p50, p90
+        assert len(q) == len(dev)
+        return q[:, :, 1], q[:, :, 0], q[:, :, 2]
+    return trial
+
+
+TRIALS.update({"chronos_bolt_small": _chronos("chronos_bolt_small"), "chronos2": _chronos("chronos2")})
+
+
+def t_blend_hgb_lp_chronos2(train, dev):
+    med, _, _ = TRIALS["hgb_long_person"](train, dev)
+    c_med, c_lo, c_hi = _chronos("chronos2")(train, dev)
+    m = 0.7 * med + 0.3 * c_med                       # fixed 70/30, as for the TFT blend; not tuned on dev
+    return m, m + (c_lo - c_med), m + (c_hi - c_med)  # Chronos-2's band width around the blended median
+
+
+TRIALS["blend_hgb_lp_chronos2"] = t_blend_hgb_lp_chronos2
+
 
 def run_trial(name: str, note: str = "") -> dict:
     c = pd.read_pickle(CACHE)
@@ -331,9 +427,12 @@ def main() -> int:
     ap.add_argument("--trial", nargs="*", default=[])
     ap.add_argument("--note", default="")
     ap.add_argument("--list", action="store_true")
+    ap.add_argument("--export-context", action="store_true")
     a = ap.parse_args()
     if a.cache:
         build_cache()
+    if a.export_context:
+        export_context()
     if a.list:
         print(", ".join(TRIALS))
     for name in a.trial:
