@@ -518,6 +518,83 @@ def t_rel_weighted_floor(train, dev):
 TRIALS["rel_weighted_floor"] = t_rel_weighted_floor
 
 
+# ================================================================ SPIKE PROTOCOL (written 2026-11-16, before any spike_ trial)
+# Question: can the forecaster catch more glucose spikes (> 250 within the hour)? Headroom check on the training
+# people: of windows that go above 250 by T+60 from <= 250 now, 26% have a meal logged in the next hour (a meal prompt
+# could help these), 48% had a meal logged in the 60 min BEFORE as_of (the model already has this information), and
+# 28% neither (unlogged meals: only 5-min re-forecasting helps, section 9).
+# Dev only (primary held-out 12); the 9 locked people are NOT used for this. Trials are tagged spike_ in the log; cap
+# 8 trials. Target: share of actual T+60 highs reached by the median and by p90 (extremes in the log), with T+60 RMSE
+# and monitor false alarms (p90 > 250 when not high) as guards. All candidates get the blend + safety floor so they
+# are compared like for like with rel_blend_floor (highs by median .464, by p90 .782 on dev).
+# Meal-curve features use the fixed Hovorka shape of section 10 (tau 40 min, clearance k = 0.02/min, gain 1); every
+# meal feature is monotone non-decreasing (monotonic_cst = +1), so more carbs never forecasts lower.
+# "prompt" trials are an UPPER BOUND: they are told the meals logged in the next hour, as if the person answered
+# "are you about to eat, and how much?" truthfully; the 50% variant hides the answer for a random half of windows.
+HOV_PAST = ["hov_past30", "hov_past60"]
+HOV_NEXT = ["carbs_next_hour", "hov_next30", "hov_next60"]
+
+
+def hov_features(df: pd.DataFrame) -> pd.DataFrame:
+    """hov_past*: remaining rise expected from meals logged in the 2 h up to as_of, sum of carbs x (e(d+h) - e(d)),
+    d = minutes since the meal. hov_next*: rise from meals logged in the next hour (prompt features; oracle)."""
+    from model.cgmacros.hybrid import effect_curve, meal_basis
+    e = effect_curve(0.02, minutes=240)
+    grid = build_grid()
+    out = []
+    for p, w in df.groupby("participant", sort=False):
+        g = grid[grid.participant == p].set_index("time_idx").sort_index()
+        carbs = g["carbs"].reindex(range(int(g.index.min()), int(g.index.max()) + 1)).fillna(0.0)
+        t0 = int(g.index.min())
+        cv = carbs.to_numpy()
+        res = np.zeros((len(w), 5))
+        for r, t in enumerate(w["time_idx"].to_numpy()):
+            i = int(t) - t0
+            past = cv[max(0, i - ENCODER + 1):i + 1]
+            d = (len(past) - 1 - np.arange(len(past))) * 5            # minutes since each past row
+            m = past > 0
+            res[r, 0] = float((past[m] * (e[d[m] + 30] - e[d[m]])).sum())
+            res[r, 1] = float((past[m] * (e[d[m] + 60] - e[d[m]])).sum())
+            nxt = cv[i + 1:i + 1 + HORIZON]
+            if len(nxt) == HORIZON:
+                b = meal_basis(nxt[None, :], 0.02)[0]
+                res[r, 2], res[r, 3], res[r, 4] = nxt.sum(), b[S30], b[S60]
+        out.append(pd.DataFrame(res, index=w.index, columns=HOV_PAST + HOV_NEXT))
+    return pd.concat(out).loc[df.index]
+
+
+def _hgb_mono(X, y, Xd, mono):
+    from sklearn.ensemble import HistGradientBoostingRegressor
+    return HistGradientBoostingRegressor(max_iter=300, learning_rate=0.05, max_leaf_nodes=31, l2_regularization=1.0,
+                                         random_state=0, monotonic_cst=mono).fit(X, y).predict(Xd)
+
+
+def _spike(train, dev, extra, hide_frac=0.0):
+    tr, dv = _with(train, dev, LONG + PERSON)
+    for d in (tr, dv):
+        d[HOV_PAST + HOV_NEXT] = hov_features(d).to_numpy()
+    if hide_frac:
+        for seed, d in ((1, tr), (2, dv)):                  # unanswered prompts: future-meal features read as 0
+            hide = np.random.default_rng(seed).random(len(d)) < hide_frac
+            d.loc[hide, HOV_NEXT] = 0.0
+    cols = FEATURES + LONG + PERSON + extra
+    mono = [1 if c in HOV_PAST + HOV_NEXT else 0 for c in cols]
+    Xt, Xd = tr[cols].to_numpy(float), dv[cols].to_numpy(float)
+    Yt = stack(tr.y) - tr["now"].to_numpy()[:, None]
+    med = np.full((len(dv), HORIZON), np.nan)
+    for s in (S30, S60):
+        med[:, s] = dv["now"].to_numpy() + _hgb_mono(Xt, Yt[:, s], Xd, mono)
+    m, lo, hi = _blend(med, dev)
+    return _safety_floor(m, lo, hi, dev)
+
+
+TRIALS.update({
+    "spike_past_meal_curve": lambda tr, dv: _spike(tr, dv, HOV_PAST),
+    "spike_prompt_ceiling": lambda tr, dv: _spike(tr, dv, HOV_PAST + HOV_NEXT),
+    "spike_prompt_half": lambda tr, dv: _spike(tr, dv, HOV_PAST + HOV_NEXT, hide_frac=0.5),
+})
+
+
 def run_trial(name: str, note: str = "") -> dict:
     c = pd.read_pickle(CACHE)
     t0 = time.time()
