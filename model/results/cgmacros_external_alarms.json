@@ -1,0 +1,400 @@
+{
+ "preregistration": "(written 2026-11-16 after the triage result above and before any alarm stream was run on\nthese people; their second use; run with --alarms):\n  Question    which alarm, checked at every 5-min reading, warns of lows early with the fewest false alarms?\n  Streams     event_model (model/cgmacros/event.py, fit on the 31 confirm-training people, its pre-registered\n              threshold; replay.event_model_stream), alert20 (15-min slope projected 20 min, replay.alert20), and\n              threshold (reactive reference). Nothing is refit or tuned on these people.\n  Scoring     unchanged from model/cgmacros/replay.py: events = >= 3 readings < 70 or > 250 in a gap-free segment,\n              timely = an in-range alarm >= 15 min before onset within 60 min, false alarm = an alarm episode (30-min\n              lockout) with no onset in the next 60 min, per day of readings; each stream against its own\n              rate-matched random baseline (20 seeds). Lows only are claimed (3 highs in both datasets).\n  Primary     event_model vs alert20 on all 73 people, both of:\n                1. fewer false alarms: 95% person-bootstrap interval of (alert20 - event_model) false alarms/day\n                   excludes 0 (above 0);\n                2. timely share non-inferior: lower bound of (event_model - alert20) timely share > -0.10.\n  Secondary   each stream vs its random baseline; per dataset; daytime only (readings 06:00-24:00 local clock,\n              re-segmented; night lows include sensor-compression artifacts); median lead.\n  Disclosed   heart rate / METs resting defaults; Hall has no meal logs (meal features 0); hour-of-day here is real\n              clock time while CGMacros timestamps were shifted, so the event model's hour features are out of\n              distribution; the rule-every-5-min arm is not run (TFT at ~142k readings).",
+ "all": {
+  "event_model": {
+   "events": 308,
+   "people_with_events": 51,
+   "days": 494.1,
+   "timely_share": 0.188,
+   "random_timely_share": 0.121,
+   "warned_at_all": 0.432,
+   "median_lead_min_if_warned": 10.0,
+   "false_alarms_per_day": 0.63,
+   "random_false_alarms_per_day": 1.93,
+   "high": {
+    "n": 3,
+    "timely": 0.333
+   },
+   "low": {
+    "n": 305,
+    "timely": 0.187
+   },
+   "timely_minus_random_ci95": [
+    0.028,
+    0.11
+   ]
+  },
+  "alert20": {
+   "events": 308,
+   "people_with_events": 51,
+   "days": 494.1,
+   "timely_share": 0.724,
+   "random_timely_share": 0.381,
+   "warned_at_all": 0.945,
+   "median_lead_min_if_warned": 25.0,
+   "false_alarms_per_day": 3.18,
+   "random_false_alarms_per_day": 7.27,
+   "high": {
+    "n": 3,
+    "timely": 1.0
+   },
+   "low": {
+    "n": 305,
+    "timely": 0.721
+   },
+   "timely_minus_random_ci95": [
+    0.286,
+    0.412
+   ]
+  },
+  "threshold": {
+   "events": 308,
+   "people_with_events": 51,
+   "days": 494.1,
+   "timely_share": 0.0,
+   "random_timely_share": 0.0,
+   "warned_at_all": 0.0,
+   "median_lead_min_if_warned": null,
+   "false_alarms_per_day": 0.0,
+   "random_false_alarms_per_day": 0.0,
+   "high": {
+    "n": 3,
+    "timely": 0.0
+   },
+   "low": {
+    "n": 305,
+    "timely": 0.0
+   },
+   "timely_minus_random_ci95": [
+    0.0,
+    0.0
+   ]
+  },
+  "event_minus_alert20_timely_ci95": [
+   -0.589,
+   -0.483
+  ],
+  "alert20_minus_event_fa_per_day_ci95": [
+   2.23,
+   2.89
+  ],
+  "bigideas": {
+   "event_model": {
+    "events": 24,
+    "people_with_events": 7,
+    "days": 128.1,
+    "timely_share": 0.042,
+    "random_timely_share": 0.104,
+    "warned_at_all": 0.583,
+    "median_lead_min_if_warned": 5.0,
+    "false_alarms_per_day": 0.39,
+    "random_false_alarms_per_day": 1.24,
+    "high": {
+     "n": 1,
+     "timely": 0.0
+    },
+    "low": {
+     "n": 23,
+     "timely": 0.043
+    }
+   },
+   "alert20": {
+    "events": 24,
+    "people_with_events": 7,
+    "days": 128.1,
+    "timely_share": 0.792,
+    "random_timely_share": 0.371,
+    "warned_at_all": 1.0,
+    "median_lead_min_if_warned": 15.0,
+    "false_alarms_per_day": 2.39,
+    "random_false_alarms_per_day": 5.87,
+    "high": {
+     "n": 1,
+     "timely": 1.0
+    },
+    "low": {
+     "n": 23,
+     "timely": 0.783
+    }
+   },
+   "threshold": {
+    "events": 24,
+    "people_with_events": 7,
+    "days": 128.1,
+    "timely_share": 0.0,
+    "random_timely_share": 0.0,
+    "warned_at_all": 0.0,
+    "median_lead_min_if_warned": null,
+    "false_alarms_per_day": 0.0,
+    "random_false_alarms_per_day": 0.0,
+    "high": {
+     "n": 1,
+     "timely": 0.0
+    },
+    "low": {
+     "n": 23,
+     "timely": 0.0
+    }
+   }
+  },
+  "hall": {
+   "event_model": {
+    "events": 284,
+    "people_with_events": 44,
+    "days": 366.0,
+    "timely_share": 0.201,
+    "random_timely_share": 0.122,
+    "warned_at_all": 0.419,
+    "median_lead_min_if_warned": 10.0,
+    "false_alarms_per_day": 0.71,
+    "random_false_alarms_per_day": 2.18,
+    "high": {
+     "n": 2,
+     "timely": 0.5
+    },
+    "low": {
+     "n": 282,
+     "timely": 0.199
+    }
+   },
+   "alert20": {
+    "events": 284,
+    "people_with_events": 44,
+    "days": 366.0,
+    "timely_share": 0.718,
+    "random_timely_share": 0.382,
+    "warned_at_all": 0.94,
+    "median_lead_min_if_warned": 25.0,
+    "false_alarms_per_day": 3.46,
+    "random_false_alarms_per_day": 7.76,
+    "high": {
+     "n": 2,
+     "timely": 1.0
+    },
+    "low": {
+     "n": 282,
+     "timely": 0.716
+    }
+   },
+   "threshold": {
+    "events": 284,
+    "people_with_events": 44,
+    "days": 366.0,
+    "timely_share": 0.0,
+    "random_timely_share": 0.0,
+    "warned_at_all": 0.0,
+    "median_lead_min_if_warned": null,
+    "false_alarms_per_day": 0.0,
+    "random_false_alarms_per_day": 0.0,
+    "high": {
+     "n": 2,
+     "timely": 0.0
+    },
+    "low": {
+     "n": 282,
+     "timely": 0.0
+    }
+   }
+  }
+ },
+ "daytime_only": {
+  "event_model": {
+   "events": 239,
+   "people_with_events": 48,
+   "days": 368.7,
+   "timely_share": 0.172,
+   "random_timely_share": 0.123,
+   "warned_at_all": 0.444,
+   "median_lead_min_if_warned": 10.0,
+   "false_alarms_per_day": 0.63,
+   "random_false_alarms_per_day": 1.85,
+   "high": {
+    "n": 3,
+    "timely": 0.0
+   },
+   "low": {
+    "n": 236,
+    "timely": 0.174
+   },
+   "timely_minus_random_ci95": [
+    -0.002,
+    0.102
+   ]
+  },
+  "alert20": {
+   "events": 239,
+   "people_with_events": 48,
+   "days": 368.7,
+   "timely_share": 0.762,
+   "random_timely_share": 0.418,
+   "warned_at_all": 0.979,
+   "median_lead_min_if_warned": 25.0,
+   "false_alarms_per_day": 3.44,
+   "random_false_alarms_per_day": 7.58,
+   "high": {
+    "n": 3,
+    "timely": 1.0
+   },
+   "low": {
+    "n": 236,
+    "timely": 0.758
+   },
+   "timely_minus_random_ci95": [
+    0.281,
+    0.42
+   ]
+  },
+  "threshold": {
+   "events": 239,
+   "people_with_events": 48,
+   "days": 368.7,
+   "timely_share": 0.0,
+   "random_timely_share": 0.0,
+   "warned_at_all": 0.0,
+   "median_lead_min_if_warned": null,
+   "false_alarms_per_day": 0.0,
+   "random_false_alarms_per_day": 0.0,
+   "high": {
+    "n": 3,
+    "timely": 0.0
+   },
+   "low": {
+    "n": 236,
+    "timely": 0.0
+   },
+   "timely_minus_random_ci95": [
+    0.0,
+    0.0
+   ]
+  },
+  "event_minus_alert20_timely_ci95": [
+   -0.66,
+   -0.522
+  ],
+  "alert20_minus_event_fa_per_day_ci95": [
+   2.44,
+   3.19
+  ],
+  "bigideas": {
+   "event_model": {
+    "events": 19,
+    "people_with_events": 6,
+    "days": 96.3,
+    "timely_share": 0.053,
+    "random_timely_share": 0.182,
+    "warned_at_all": 0.684,
+    "median_lead_min_if_warned": 5.0,
+    "false_alarms_per_day": 0.42,
+    "random_false_alarms_per_day": 1.25,
+    "high": {
+     "n": 1,
+     "timely": 0.0
+    },
+    "low": {
+     "n": 18,
+     "timely": 0.056
+    }
+   },
+   "alert20": {
+    "events": 19,
+    "people_with_events": 6,
+    "days": 96.3,
+    "timely_share": 0.789,
+    "random_timely_share": 0.416,
+    "warned_at_all": 1.0,
+    "median_lead_min_if_warned": 20.0,
+    "false_alarms_per_day": 2.86,
+    "random_false_alarms_per_day": 6.67,
+    "high": {
+     "n": 1,
+     "timely": 1.0
+    },
+    "low": {
+     "n": 18,
+     "timely": 0.778
+    }
+   },
+   "threshold": {
+    "events": 19,
+    "people_with_events": 6,
+    "days": 96.3,
+    "timely_share": 0.0,
+    "random_timely_share": 0.0,
+    "warned_at_all": 0.0,
+    "median_lead_min_if_warned": null,
+    "false_alarms_per_day": 0.0,
+    "random_false_alarms_per_day": 0.0,
+    "high": {
+     "n": 1,
+     "timely": 0.0
+    },
+    "low": {
+     "n": 18,
+     "timely": 0.0
+    }
+   }
+  },
+  "hall": {
+   "event_model": {
+    "events": 220,
+    "people_with_events": 42,
+    "days": 272.4,
+    "timely_share": 0.182,
+    "random_timely_share": 0.117,
+    "warned_at_all": 0.423,
+    "median_lead_min_if_warned": 10.0,
+    "false_alarms_per_day": 0.71,
+    "random_false_alarms_per_day": 2.06,
+    "high": {
+     "n": 2,
+     "timely": 0.0
+    },
+    "low": {
+     "n": 218,
+     "timely": 0.183
+    }
+   },
+   "alert20": {
+    "events": 220,
+    "people_with_events": 42,
+    "days": 272.4,
+    "timely_share": 0.759,
+    "random_timely_share": 0.418,
+    "warned_at_all": 0.977,
+    "median_lead_min_if_warned": 25.0,
+    "false_alarms_per_day": 3.64,
+    "random_false_alarms_per_day": 7.91,
+    "high": {
+     "n": 2,
+     "timely": 1.0
+    },
+    "low": {
+     "n": 218,
+     "timely": 0.757
+    }
+   },
+   "threshold": {
+    "events": 220,
+    "people_with_events": 42,
+    "days": 272.4,
+    "timely_share": 0.0,
+    "random_timely_share": 0.0,
+    "warned_at_all": 0.0,
+    "median_lead_min_if_warned": null,
+    "false_alarms_per_day": 0.0,
+    "random_false_alarms_per_day": 0.0,
+    "high": {
+     "n": 2,
+     "timely": 0.0
+    },
+    "low": {
+     "n": 218,
+     "timely": 0.0
+    }
+   }
+  }
+ },
+ "criterion_1_fewer_false_alarms": true,
+ "criterion_2_timely_noninferior": false,
+ "confirmed": false
+}

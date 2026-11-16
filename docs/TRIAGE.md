@@ -628,6 +628,38 @@ same 5-min grid:
     numbers above: recall .618, false alarms unchanged, monitor calls +0.6 points. That variant has not been
     pre-registered.
 
+## 15. A 5-minute monitoring loop, tested on the 73 external people
+
+`model/cgmacros/monitor.py`:
+- **How it works:** feed one reading at a time and it returns an alarm with its reasons. A 30-min lockout and a reset
+  after gaps are the same as in every replay test.
+- **Parity check:** it reproduces the offline scorer's alarm episodes exactly (272 of 272 on 12 people, 0
+  differences).
+- **Unit tests:** `tests/model_cgmacros/test_monitor.py`.
+
+**Which alarm should it use?** Pre-registered in `7994f4e`, the 73 people's second use, lows only. The event model
+(§8), checked every 5 min, was compared with alert20 (§9) using `replay.py`'s scoring unchanged:
+
+| 73 external people, 308 events (305 lows) from 51 people | Timely (>= 15 min) | Its random baseline | Median lead | False alarms/day |
+|---|---|---|---|---|
+| Event model | .188 | .121 | 10 min | 0.63 |
+| **alert20** | **.724** | .381 | **25 min** | 3.18 |
+| Event model, daytime only | .172 | .123 | 10 min | 0.63 |
+| alert20, daytime only | .762 | .418 | 25 min | 3.44 |
+
+- **Pre-registered result: not confirmed.**
+  - The event model has fewer false alarms: 2.6/day fewer, CI [2.2, 2.9].
+  - But its timely share is far below non-inferior: -54 points, CI [-59, -48].
+  - It was trained on CGMacros, where urgent moments are mostly highs, and it does not carry over to lows. On CGMacros
+    lows it was also the weakest (§9).
+- **alert20 carries over:**
+  - Timely .724 vs its random .381, in both datasets (BIG IDEAs .79, Hall .72) and with nights excluded (.76).
+  - On CGMacros it was .677 (§9, all 45 people).
+  - The cost is about 3 false alarms a day. That is the standing trade-off: §9's attempt to lower it by combining with
+    the rule failed its false-alarm limit.
+- **Decision:** the loop's default policy is alert20. The event model is an opt-in second policy, and it is not trusted
+  for lows.
+
 ## Limits
 
 - Population: adults without insulin therapy; nothing here transfers to type 1 diabetes.
