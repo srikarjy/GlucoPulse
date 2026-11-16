@@ -248,13 +248,13 @@ PERSON = ["p_mean", "p_sd", "p_days", "p_meal_rise", "p_n_meals", "p_resid60"]
 LONG = ["m6h", "sd6h", "m24h", "sd24h", "now_minus_m24h"]
 
 
-def extra_features(df: pd.DataFrame) -> pd.DataFrame:
+def extra_features(df: pd.DataFrame, grid: pd.DataFrame | None = None) -> pd.DataFrame:
     """Past-only extras per (participant, time_idx):
     LONG    mean/sd of glucose over the previous 6 h and 24 h (readings present only);
     PERSON  the person's own history before as_of: mean/sd of all earlier glucose, days observed, mean 60-min rise
             after earlier logged meals (only meals whose hour ended by as_of), count of those meals, and the mean
             60-min change after earlier moments (a personal drift term; only hours that ended by as_of)."""
-    grid = build_grid()
+    grid = build_grid() if grid is None else grid
     out = []
     for p, w in df.groupby("participant", sort=False):
         g = grid[grid.participant == p].set_index("time_idx").sort_index()

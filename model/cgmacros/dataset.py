@@ -34,9 +34,11 @@ COLUMNS = ["participant", "time_idx", "ts", "glucose", "delta", "hr", "hr_observ
            "carbs", "protein", "fat", "fiber", "hour", "dow"]
 
 
-def grid_from_measurements(participant: str, ms: Iterable[Measurement]) -> pd.DataFrame:
+def grid_from_measurements(participant: str, ms: Iterable[Measurement], cgm_device: str = "dexcom-g6") -> pd.DataFrame:
+    """cgm_device: the 5-minute CGM stream that forms the rows (dexcom-g6 for CGMacros; external tests may pass
+    another native 5-minute Dexcom, e.g. dexcom-g4)."""
     ms = list(ms)
-    glucose = [(m.ts, float(m.value)) for m in ms if m.kind is Kind.GLUCOSE_CGM and m.device == "dexcom-g6"]
+    glucose = [(m.ts, float(m.value)) for m in ms if m.kind is Kind.GLUCOSE_CGM and m.device == cgm_device]
     if not glucose:
         return pd.DataFrame(columns=COLUMNS)
     g = pd.DataFrame(glucose, columns=["ts", "glucose"])
