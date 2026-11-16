@@ -498,6 +498,56 @@ left it unchanged.
   - It took about 17 minutes on CPU for 25k windows, about 40 ms per forecast.
   - `hgb_long_person` alone keeps most of the gain (+4.1) with no extra dependency, but its band is too wide (0.86).
 
+## 12. Reliability: the accurate model warned less at the extremes; a safety floor fixes that (confirmed)
+
+`model/cgmacros/reliability.py` audited the §11 blend. It checked:
+- the Clarke error grid;
+- error by the glucose level that occurred;
+- whether the median and band reach actual lows (< 70) and highs (> 250);
+- cold start;
+- each person.
+
+**Finding:** the blend's average gain came partly from predicting closer to the person's usual level, which is the
+wrong direction for a warning system.
+- On dev, the median reached 3% of actual lows (TFT A: 31%) and the p10 reached 43% (A: 69%).
+- On the locked 9, the median reached 12% of actual highs (A: 21%).
+- Clarke A+B was fine (99.3% dev, 99.5% locked, vs A's 99.1% and 99.2%).
+- Day 1 of a person's data is the weakest (dev 27.2), but still better than A.
+
+**Fix, chosen on dev** (9 more trials, 23 in all; `rel_*` in `lab_log.jsonl`):
+- *Learning the band directly* (quantile trees) made the tails worse.
+- *Up-weighting extreme training labels* helped highs but not lows.
+- *Kept: a safety floor.* Where TFT A's median is outside 70-250 and the blend's is not, use A's median. The band is
+  the union of both bands. Nothing is refit, and the forecaster never warns less than the current one.
+
+**Locked test** (pre-registered in `7eb9df9`, the 9 people's sixth use):
+
+| 9 locked people, T+60 | TFT A (current) | Blend (§11) | **Blend + floor** |
+|---|---|---|---|
+| RMSE | 26.96 | 22.46 | **22.87** (gain +4.1 [3.0, 5.1]) |
+| Rising windows RMSE | 41.6 | 35.8 | 36.2 |
+| Actual highs reached by median / p90 | 21% / 57% | 12% / 52% | **22% / 62%** |
+| Actual lows reached by median / p10 | 81% / 97% | 80% / 96% | **84% / 97%** |
+| p90 > 250 when the actual stayed <= 250 | 3.9% | — | 4.2% |
+| 80% band coverage | 0.79 | 0.77 | 0.89 (conservative) |
+| People better than A | — | 9 of 9 | 9 of 9 |
+
+- **Confirmed.** Both criteria passed:
+  - The RMSE gain interval excludes 0.
+  - Monitor false alarms rose 0.3 points, within the 1-point limit.
+- **The cost:** the floor gives back 0.4 of the RMSE gain, and the band is wider than it needs to be.
+
+**Still weak: big spikes.**
+- When glucose actually went above 250, every model predicted far too low (bias -70 for the floored model).
+- The median reached only 22% of those highs.
+- These are mostly meals the forecaster cannot see. Better history models cannot fix that; knowing about the meal
+  (a logged or prompted meal, §10) or checking every 5 min (§9) can.
+
+**Status:**
+- **Reliable as a forecaster:** more accurate for every locked person, and never less alarming than the current one at
+  the extremes.
+- **Still untested for triage levels:** that needs new people.
+
 ## Limits
 
 - Population: adults without insulin therapy; nothing here transfers to type 1 diabetes.
