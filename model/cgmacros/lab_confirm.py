@@ -23,6 +23,17 @@ before any window, feature or forecast of the 9 locked people was computed):
               acceptable in 0.75-0.85; hgb_long_person alone and Chronos-2 alone; per-person wins vs A.
   Not tested  triage levels. Swapping the forecaster would change the rule's levels; that needs its own test.
   Expectation dev numbers are the best of 14 trials, so the locked gain should come in below dev's +4.5.
+
+PRE-REGISTERED, SAFETY FLOOR (written 2026-11-16 after the reliability audit, model/results/cgmacros_reliability_*.json,
+showed the blend reaches fewer actual lows/highs than TFT A; chosen on dev from 9 more trials, 23 in all; run with
+--score-floor; the 9 people's sixth use):
+  Model       "blend_floor": the blend above; where TFT A's median is outside 70-250 and the blend's is not, use A's
+              median; band = union of the blend band and A's band (lo = min, hi = max). Nothing is refit.
+  Criteria    (1) T+60 RMSE gain over A, 95% person-bootstrap lower bound > 0;
+              (2) monitor false alarms: share of windows with p90 > 250 whose actual T+60 stayed <= 250 at most
+                  1.0 point above A's.
+  By design   actual lows/highs reached by the median and by p10/p90 are >= A's (reported, not criteria).
+  Secondary   the extremes table, coverage (expected above 0.85: the union band is conservative), per-person wins.
 """
 from __future__ import annotations
 
@@ -98,17 +109,45 @@ def score() -> None:
     print(json.dumps({k: v for k, v in out.items() if k != "preregistration"}, indent=1))
 
 
+def score_floor() -> None:
+    c = pd.read_pickle(CACHE)
+    train, test = c["train"], c["test"]
+    q = np.load(PRED)
+    med_h, _, _ = lab.TRIALS["hgb_long_person"](train, test)
+    blend = 0.7 * med_h + 0.3 * q[:, :, 1]
+    m, lo, hi = lab._safety_floor(blend, blend + q[:, :, 0] - q[:, :, 1], blend + q[:, :, 2] - q[:, :, 1], test)
+    r = lab.score(test, m, lo, hi)
+    r.pop("section1_test7", None)
+    y, A = lab.stack(test.y), lab.stack(test.glucose_med)
+    per = {p: [round(lab.rmse(m[ix, lab.S60], y[ix, lab.S60]), 1), round(lab.rmse(A[ix, lab.S60], y[ix, lab.S60]), 1)]
+           for p, ix in test.groupby("participant").indices.items()}
+    e = r["extremes"]
+    out = {"preregistration": __doc__.split("PRE-REGISTERED, SAFETY FLOOR")[1].strip(), "windows": len(test),
+           "blend_floor": r, "per_person_t60_vs_A": per, "people_better_than_A": sum(a < b for a, b in per.values()),
+           "criterion_1_t60_gain_ci_lower_above_0": bool(r["t60_gain_vs_A_ci95"][0] > 0),
+           "criterion_2_monitor_false_alarms_at_most_1pt_above_A": bool(
+               e["p90_over_250_when_not_high"] - e["A_p90_over_250_when_not_high"] <= 0.01)}
+    out["confirmed"] = out["criterion_1_t60_gain_ci_lower_above_0"] and out[
+        "criterion_2_monitor_false_alarms_at_most_1pt_above_A"]
+    path = ROOT / "model" / "results" / "cgmacros_lab_locked_floor.json"
+    path.write_text(json.dumps(out, indent=1) + "\n")
+    print(json.dumps({k: v for k, v in out.items() if k != "preregistration"}, indent=1))
+
+
 def main() -> int:
     if SCHEME != "confirm":
         raise SystemExit("run with CGMACROS_SPLIT=confirm")
     ap = argparse.ArgumentParser()
     ap.add_argument("--prepare", action="store_true")
     ap.add_argument("--score", action="store_true")
+    ap.add_argument("--score-floor", action="store_true")
     a = ap.parse_args()
     if a.prepare:
         prepare()
     if a.score:
         score()
+    if a.score_floor:
+        score_floor()
     return 0
 
 

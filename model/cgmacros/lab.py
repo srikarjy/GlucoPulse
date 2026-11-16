@@ -159,6 +159,30 @@ def score(dev: pd.DataFrame, med: np.ndarray, lo, hi) -> dict:
     out["t60_gain_vs_A_ci95"] = boot_gain(dev, med, A, S60)
     if lo is not None:
         out["coverage80_t60"] = round(float(np.mean((y[:, S60] >= lo[:, S60]) & (y[:, S60] <= hi[:, S60]))), 3)
+    # extremes (added 2026-11-16 after the reliability audit): does the forecast reach the lows/highs that happen?
+    # The rule calls urgent on the median and monitor on p90, so both matter. Reference: TFT A on the same windows.
+    yy, low, high = y[:, S60], y[:, S60] < 70, y[:, S60] > 250
+    Al, Ah = stack(dev.glucose_lo)[:, S60], stack(dev.glucose_hi)[:, S60]
+    ext = {"highs_n": int(high.sum()), "lows_n": int(low.sum()),
+           "highs_by_median": round(float((med[high, S60] > 250).mean()), 3),
+           "lows_by_median": round(float((med[low, S60] < 70).mean()), 3),
+           "A_highs_by_median": round(float((A[high, S60] > 250).mean()), 3),
+           "A_lows_by_median": round(float((A[low, S60] < 70).mean()), 3),
+           "A_highs_by_p90": round(float((Ah[high] > 250).mean()), 3),
+           "A_lows_by_p10": round(float((Al[low] < 70).mean()), 3),
+           "bias_above_250": round(float((med[high, S60] - yy[high]).mean()), 1),
+           "A_bias_above_250": round(float((A[high, S60] - yy[high]).mean()), 1)}
+    if lo is not None:
+        ext["highs_by_p90"] = round(float((hi[high, S60] > 250).mean()), 3)
+        ext["lows_by_p10"] = round(float((lo[low, S60] < 70).mean()), 3)
+        ok = (yy >= lo[:, S60]) & (yy <= hi[:, S60])
+        ext["band_width_t60"] = round(float(np.mean(hi[:, S60] - lo[:, S60])), 1)
+        ext["A_band_width_t60"] = round(float(np.mean(Ah - Al)), 1)
+        # false alarms of the band: p90 > 250 when the actual stayed <= 250, p10 < 70 when actual stayed >= 70
+        ext["p90_over_250_when_not_high"] = round(float((hi[~high, S60] > 250).mean()), 4)
+        ext["A_p90_over_250_when_not_high"] = round(float((Ah[~high] > 250).mean()), 4)
+        ext["coverage_rising"] = round(float(ok[(dev.d15 >= 20).to_numpy()].mean()), 3)
+    out["extremes"] = ext
     return out
 
 
@@ -404,6 +428,94 @@ def t_blend_hgb_lp_chronos2(train, dev):
 
 
 TRIALS["blend_hgb_lp_chronos2"] = t_blend_hgb_lp_chronos2
+
+
+# ---------------------------------------------------------------- reliability round: tails and extremes
+def _hgb_fit(X, y, Xd, quantile=None, weight=None):
+    from sklearn.ensemble import HistGradientBoostingRegressor
+    kw = {"loss": "quantile", "quantile": quantile} if quantile is not None else {}
+    return HistGradientBoostingRegressor(max_iter=300, learning_rate=0.05, max_leaf_nodes=31, l2_regularization=1.0,
+                                         random_state=0, **kw).fit(X, y, sample_weight=weight).predict(Xd)
+
+
+def _lp_frames(train, dev):
+    tr, dv = _with(train, dev, LONG + PERSON)
+    cols = FEATURES + LONG + PERSON
+    Xt, Xd = tr[cols].to_numpy(float), dv[cols].to_numpy(float)
+    Yt = stack(tr.y) - tr["now"].to_numpy()[:, None]
+    return tr, dv, Xt, Xd, Yt
+
+
+def _extreme_weight(tr, s, w=5.0):
+    """Training-label weights: windows whose actual value at step s is < 80 or > 220 count w times."""
+    ys = stack(tr.y)[:, s]
+    return np.where((ys < 80) | (ys > 220), w, 1.0)
+
+
+def _lp_predict(train, dev, weighted=False, qband=False):
+    tr, dv, Xt, Xd, Yt = _lp_frames(train, dev)
+    now = dv["now"].to_numpy()
+    med = np.full((len(dv), HORIZON), np.nan)
+    lo, hi = med.copy(), med.copy()
+    for s in (S30, S60):
+        wt = _extreme_weight(tr, s) if weighted else None
+        med[:, s] = now + _hgb_fit(Xt, Yt[:, s], Xd, weight=wt)
+        if qband:
+            lo[:, s] = now + _hgb_fit(Xt, Yt[:, s], Xd, quantile=0.1, weight=wt)
+            hi[:, s] = now + _hgb_fit(Xt, Yt[:, s], Xd, quantile=0.9, weight=wt)
+    return med, lo, hi
+
+
+def _blend(med, dev, band_from_chronos=True, lo=None, hi=None):
+    c_med, c_lo, c_hi = _chronos("chronos2")(None, dev)
+    m = 0.7 * med + 0.3 * c_med
+    if band_from_chronos:
+        return m, m + (c_lo - c_med), m + (c_hi - c_med)
+    return m, m + (lo - med), m + (hi - med)          # quantile-tree offsets around the blended median
+
+
+def t_rel_qband(train, dev):
+    med, lo, hi = _lp_predict(train, dev, qband=True)
+    return _blend(med, dev, False, lo, hi)
+
+
+def t_rel_weighted(train, dev):
+    med, _, _ = _lp_predict(train, dev, weighted=True)
+    return _blend(med, dev)
+
+
+def t_rel_weighted_qband(train, dev):
+    med, lo, hi = _lp_predict(train, dev, weighted=True, qband=True)
+    return _blend(med, dev, False, lo, hi)
+
+
+def _safety_floor(m, lo, hi, dev):
+    """Never warn less than TFT A: if A's median is outside 70-250 and the candidate's is not, use A's median; the
+    band is the union of both bands."""
+    A, Al, Ah = stack(dev.glucose_med), stack(dev.glucose_lo), stack(dev.glucose_hi)
+    a_out = (A > 250) | (A < 70)
+    m_out = (m > 250) | (m < 70)
+    m2 = np.where(a_out & ~m_out, A, m)
+    return m2, np.fmin(lo, Al), np.fmax(hi, Ah)
+
+
+def t_rel_blend_floor(train, dev):
+    return _safety_floor(*t_blend_hgb_lp_chronos2(train, dev), dev)
+
+
+def t_rel_weighted_qband_floor(train, dev):
+    return _safety_floor(*t_rel_weighted_qband(train, dev), dev)
+
+
+TRIALS.update({"rel_qband": t_rel_qband, "rel_weighted": t_rel_weighted, "rel_weighted_qband": t_rel_weighted_qband,
+               "rel_blend_floor": t_rel_blend_floor, "rel_weighted_qband_floor": t_rel_weighted_qband_floor})
+
+
+def t_rel_weighted_floor(train, dev):
+    return _safety_floor(*t_rel_weighted(train, dev), dev)
+
+
+TRIALS["rel_weighted_floor"] = t_rel_weighted_floor
 
 
 def run_trial(name: str, note: str = "") -> dict:
