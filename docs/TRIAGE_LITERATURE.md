@@ -107,6 +107,35 @@ read from the full text; "abstract" means only the abstract was seen. Searched 2
   `U_G(t) = D2(t) / tau_D`, `tau_D = 40 min`, carbohydrate bioavailability `A_G = 0.8`. This is the fixed meal-curve
   shape in the hybrid.
 
+## 8. Better 30-60 min forecasts: what has worked elsewhere (searched 2026-11-16, abstracts unless noted)
+
+- **Zhang et al. (2026), arXiv:2609.11872.** *Abstract.* Eight CGM datasets (T1D, T2D, no diabetes).
+  - Zero-shot foundation models did not beat strong task-specific baselines (Elastic Net, PatchTST).
+  - Lightly fine-tuned Chronos-Bolt cut RMSE 8.6-18.2% in the non-diabetes/T2D cohort.
+  - On CGMacros, residual fusion of meal context cut post-meal RMSE about 15%.
+- **GlucoFM-Bench (2026), arXiv:2606.06881.** *Abstract.* 15 datasets, 1,117 people. Chronos-2 and TimesFM zero-shot
+  came within 5% of the best fully trained model. With plenty of data, a lightweight LSTM was best, by 4-21%.
+- **GlucoAgent (2026), arXiv:2611.04126** (section 2). On CGMacros: Chronos-2 averaged 23.5 RMSE over 30-120 min.
+  Generated code that retrieves similar past meals and back-tests per-person models reached 22.5; post-meal 60-min
+  RMSE went from 31.0 to 26.5.
+- **Retrieval of similar past episodes:**
+  - GlyRAG (2026), arXiv:2601.05353, *abstract*: 60-min RMSE on OhioT1DM went from 23.1 (PatchTST) to 20.2.
+  - RAFT / "Retrieval Mechanisms Surpass Long-Context Scaling" (2026), arXiv:2605.08217, *abstract*: longer raw
+    context hurt (inverse scaling); retrieving relevant past segments helped.
+- **Personal traits are learnable quickly.**
+  - doi:10.64898/2026.09.14.26362991, *abstract*: 50,463 free-living meals from 992 adults without diabetes. Two
+    stable per-person response axes; 3 days of data approximated 14.
+  - Incrementally retrained LSTM (PMC11999170), *abstract*: adapting to each person's own data cut 30-min RMSE
+    14.6 -> 10.2 (T1D).
+- **Reproducibility warning:** PMC13541153, *abstract*. 8 deep models re-run on 128 people: errors depended strongly on
+  each person's glycemic control, and generalization across datasets was limited.
+- **Ranking for this project (cheapest, best-supported first):**
+  1. Strong simple baselines: ridge/Elastic Net or boosted trees, direct multi-horizon.
+  2. Per-person adaptation from the person's own earlier days. Our personalized meal gain already helped (§10).
+  3. Chronos-2 / Chronos-Bolt, zero-shot then lightly fine-tuned.
+  4. Retrieval of the person's similar past windows.
+  5. Ensembles.
+
 ## What this suggests for the panel
 
 1. The level should come from a rule or a small classifier (section 5 of `TRIAGE.md`), not from the LLM vote.
