@@ -72,6 +72,23 @@ read from the full text; "abstract" means only the abstract was seen. Searched 2
   LLMs express verified facts within bounded interfaces." *Relevance:* the same split our results point to, and the
   same mechanism as our grounding check (which removed ~45% of agent claims).
 
+## 6. Warn early from the CGM stream: published alert and meal-detection algorithms
+
+- **Harvey, Dassau, Zisser, Seborg, Doyle, J Diabetes Sci Technol (2014), doi:10.1177/1932296814523881.** *Read
+  (equations, from PMC).* The Glucose Rate Increase Detector (GRID): noise-spike filter (3 mg/dL/min), first-order
+  low-pass filter, 3-point Lagrangian derivative, detection if filtered glucose > 130 mg/dL and the last 3 rates
+  > 1.5 or the last 2 > 1.6 mg/dL/min (tau_F = 6 min). Tuned on type 1 diabetes. *Relevance:* implemented exactly in
+  `model/cgmacros/replay.py`; the trigger for a meal prompt or re-triage.
+- **Hochsmann et al., Scientific Reports (2026), doi:10.1038/s41598-026-50699-5.** *Read (methods, results).* Nine
+  published CGM-only meal detectors on 16 healthy adults, free-living, with a shared protocol: 120-min match
+  window, 120-min lockout after a true positive. GRID: 70.4% sensitivity, 0.26 false positives/day, 37 min to
+  detection; rate-of-change detectors are fastest but least sensitive. *Relevance:* our matching rules and our
+  reference numbers; GRID's healthy-adult tuning is our secondary.
+- **Dassau, Bequette, Buckingham, Doyle, Diabetes Care (2008), doi:10.2337/dc07-1293.** *Abstract only.* The first
+  CGM meal-detection algorithm (voting on rate and acceleration): meals detected about 30 min after eating began,
+  when glucose was ~21 mg/dL above baseline. *Relevance:* the time scale: a meal is visible on the CGM within ~30 min,
+  long before a spike peaks, which is why checking every 5 min matters more than a better one-off model.
+
 ## What this suggests for the panel
 
 1. The level should come from a rule or a small classifier (section 5 of `TRIAGE.md`), not from the LLM vote.

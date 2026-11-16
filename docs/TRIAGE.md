@@ -270,7 +270,80 @@ advance: urgent if the current reading + 4 x the 15-min change is outside 70-250
 
 **Status:** not shipped. The evidence is a small, consistent gain that this dataset is too small to confirm. The
 largest remaining error, a spike from a quiet baseline, needs new information (an upcoming-meal prompt or re-triage
-when a meal is logged), not a better model of the past.
+when a meal is logged), not a better model of the past. (Section 9 qualifies this: checking every 5 min, rather than
+every 30, warns of most of these spikes before they cross 250.)
+
+## 9. Five-minute replay: published CGM alerts (alert works; adding it to the rule is not confirmed)
+
+`model/cgmacros/replay.py` replays each person's data reading by reading, as a live CGM system would. The protocol
+was committed (`3eba163`) before any algorithm was run on CGMacros:
+- **Event:** at least 3 readings in a row above 250 or below 70.
+- **Warning:** an alarm while the reading is still in the 70-250 range, at most 60 min before onset. "Timely" means at
+  least 15 min ahead.
+- **False alarm:** an alarm episode (30-min lockout) with no event in the next 60 min. Counted per day of monitored
+  readings.
+- **Random baseline:** each stream is also compared with random alarms at the same per-person rate (20 seeds). A
+  stream that alarms more often warns more by chance.
+
+No algorithm uses parameters fitted to CGMacros.
+
+**Primary 1 (all 45 people, 223 events from 33 people, 439 days): passed.**
+
+| Algorithm | Timely | Random | Warned at all | Median lead | False alarms/day |
+|---|---|---|---|---|---|
+| alert20 (15-min slope projected 20 min) | .677 | .316 | .982 | 20 min | 2.37 |
+| rate2 (\|slope\| >= 2 mg/dL/min) | .587 | .301 | | | 3.33 |
+| GRID (Harvey 2014 tuning) | .426 | .213 | | | 1.91 |
+| GRID, healthy-adult tuning (Hochsmann 2026) | .596 | .441 | | | 5.09 |
+
+- alert20 beats its random baseline by 36 points, 95% CI by person [28, 47].
+- The 20-min median lead is set by design: alert20 projects 20 min ahead.
+- alert20 warns timely on .64 of highs and .83 of lows. GRID detects rises only, so it warns on almost no lows (.02).
+- GRID as a meal detector, against logged meals:
+  - Harvey tuning: 44% sensitivity, 0.6 false positives/day, 30 min to detection.
+  - Healthy-adult tuning: 75%, 1.95/day, 30 min. The published figures are 70%, 0.26/day, 37 min.
+  - Our false positives are higher, probably because of unlogged snacks and because, unlike the paper, there is no
+    night exclusion. The implementation looks right.
+
+**Primary 2 (the 14 people the confirm forecaster never saw): rule + alert20 vs the rule, both checked every 5 min.**
+The rule's level was computed at 98.7% of readings.
+
+| Stream | 14 people: timely (random) | False alarms/day | 9 new people: timely (random) | False alarms/day |
+|---|---|---|---|---|
+| Rule | .395 (.180) | 0.78 | .385 (.150) | 0.82 |
+| **Rule + alert20** | **.741** (.415) | **2.38** | .769 (.304) | 2.05 |
+| alert20 alone | .691 (.344) | 2.14 | .731 (.238) | 1.74 |
+| Event model alone, secondary | .728 (.313) | 0.93 | .731 (.196) | 0.82 |
+
+There are 81 events from 10 people (70 highs, 11 lows) over 138 days. The 9 new people have 26 events from 7 people
+over 89 days.
+
+- **Pre-registered result: not confirmed.**
+  - Criterion (a) passed: the timely share rose by 35 points, 95% CI by person [28, 50].
+  - Criterion (b) failed: false alarms rose by **1.60 a day**, over the limit of 1.0.
+  - On the 9 new people, false alarms rose by 1.23 a day, which also fails.
+  - The alert's parameters were not retuned after seeing this. Any tuned version would be exploratory.
+- **The trade:**
+  - All 14 people: about **28 more events warned in time** for about **221 more false alarms**, roughly 8 per extra
+    warning.
+  - 9 new people: about 10 more for about 109 more.
+- **Checking every 5 min is what helps.**
+  - The rule alone, checked every 5 min, warns timely on .37 of highs.
+  - With alert20 added, that rises to .71.
+  - So many of the spikes §8 called invisible become visible once they start rising, about 15-20 min before they
+    cross 250. That fits Dassau 2008, where meals showed on the CGM about 30 min after eating began.
+  - This does not show that those exact §8 misses are among the newly warned events; that was not checked.
+- **Secondary: the event model checked every 5 min.** This is the §8 model alone, trained on the 31 training people,
+  with its pre-registered threshold, without the rule.
+  - Its timely share is close to rule + alert20 (.728 vs .741), at the rule's false-alarm rate (0.93 vs 0.78 a day).
+  - It has the largest margin over its random baseline: 42 points on all 14 people, vs 33 for rule + alert20.
+  - It is weaker on lows: .545 timely, the same as the rule. It warns at all on only .89 of events.
+  - No criterion was set for it, so it is a candidate for the next pre-registered test, not a finding.
+- **Lows:** 11 events (6 on the 9 new people). That is too few for any claim.
+
+**Status:** not shipped. A 20-min predictive alert gives real early warning on its own, about 2 false alarms a day,
+in line with consumer CGM alerts. Adding it to the rule failed the false-alarm limit set in advance. Next:
+pre-register the 5-min event model, or the rule OR the event model, with the same two criteria.
 
 ## Limits
 
