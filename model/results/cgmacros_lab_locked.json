@@ -1,0 +1,214 @@
+{
+ "preregistration": "(written 2026-11-16, after 14 dev trials in model/results/lab_log.jsonl on the primary held-out 12, and\nbefore any window, feature or forecast of the 9 locked people was computed):\n  People      fit on the 31 confirm-training people only; test on the 9 confirm-test people (003, 008, 009, 014, 016,\n              017, 038, 043, 045). This is these 9 people's fifth confirmatory use (TRIAGE.md sections 7-10 before it).\n              The 5 confirm early-stopping people were dev people in the lab, so no all-14 number is reported.\n  Windows     lab.person_windows: every as_of with 2 h contiguous history and a contiguous next hour (stride 1).\n  Primary     \"blend\": 0.7 x hgb_long_person + 0.3 x Chronos-2 median, band = Chronos-2's p10/p90 offsets around the\n              blended median (fixed weights, not tuned).\n                hgb_long_person  HistGradientBoostingRegressor(max_iter=300, learning_rate=0.05, max_leaf_nodes=31,\n                                 l2_regularization=1.0, random_state=0), one per step (T+30, T+60), target = change\n                                 from now, features lab.FEATURES + LONG + PERSON (no future-meal feature).\n                Chronos-2        chronos-forecasting==2.0.1, amazon/chronos-2 at revision\n                                 29ec3766d36d6f73f0696f85560a422f50e8498c, zero-shot, 512-reading context, CPU.\n  Baseline    TFT A (glucose history only), the confirm-split checkpoint (never trained on these 9).\n  Criterion   T+60 RMSE gain of the blend over A, 95% person-bootstrap interval lower bound > 0.\n  Secondary   T+30; slices (meal in the next hour, rising >= 20 mg/dL per 15 min); 80% band coverage at T+60, judged\n              acceptable in 0.75-0.85; hgb_long_person alone and Chronos-2 alone; per-person wins vs A.\n  Not tested  triage levels. Swapping the forecaster would change the rule's levels; that needs its own test.\n  Expectation dev numbers are the best of 14 trials, so the locked gain should come in below dev's +4.5.",
+ "people": [
+  "cgmacros-003",
+  "cgmacros-008",
+  "cgmacros-009",
+  "cgmacros-014",
+  "cgmacros-016",
+  "cgmacros-017",
+  "cgmacros-038",
+  "cgmacros-043",
+  "cgmacros-045"
+ ],
+ "windows": 25030,
+ "A_t60": 26.96,
+ "A_t30": 18.5,
+ "blend": {
+  "all": {
+   "n": 25030,
+   "t30": 15.72,
+   "t60": 22.46,
+   "A_t60": 26.96
+  },
+  "meal_next_hour": {
+   "n": 3706,
+   "t30": 15.12,
+   "t60": 31.28,
+   "A_t60": 35.73
+  },
+  "rising": {
+   "n": 1248,
+   "t30": 28.37,
+   "t60": 35.81,
+   "A_t60": 41.61
+  },
+  "t60_gain_vs_A": 4.5,
+  "t60_gain_vs_A_ci95": [
+   3.28,
+   5.57
+  ],
+  "coverage80_t60": 0.773,
+  "per_person_t60_vs_A": {
+   "cgmacros-003": [
+    20.6,
+    27.2
+   ],
+   "cgmacros-008": [
+    22.2,
+    28.7
+   ],
+   "cgmacros-009": [
+    22.7,
+    24.1
+   ],
+   "cgmacros-014": [
+    21.7,
+    26.7
+   ],
+   "cgmacros-016": [
+    15.9,
+    18.8
+   ],
+   "cgmacros-017": [
+    14.6,
+    17.2
+   ],
+   "cgmacros-038": [
+    24.3,
+    29.0
+   ],
+   "cgmacros-043": [
+    19.2,
+    22.1
+   ],
+   "cgmacros-045": [
+    35.4,
+    41.8
+   ]
+  },
+  "people_better_than_A": 9
+ },
+ "hgb_long_person": {
+  "all": {
+   "n": 25030,
+   "t30": 15.81,
+   "t60": 22.89,
+   "A_t60": 26.96
+  },
+  "meal_next_hour": {
+   "n": 3706,
+   "t30": 15.21,
+   "t60": 30.84,
+   "A_t60": 35.73
+  },
+  "rising": {
+   "n": 1248,
+   "t30": 28.92,
+   "t60": 36.2,
+   "A_t60": 41.61
+  },
+  "t60_gain_vs_A": 4.07,
+  "t60_gain_vs_A_ci95": [
+   2.37,
+   5.44
+  ],
+  "coverage80_t60": 0.859,
+  "per_person_t60_vs_A": {
+   "cgmacros-003": [
+    20.9,
+    27.2
+   ],
+   "cgmacros-008": [
+    21.7,
+    28.7
+   ],
+   "cgmacros-009": [
+    25.2,
+    24.1
+   ],
+   "cgmacros-014": [
+    21.2,
+    26.7
+   ],
+   "cgmacros-016": [
+    15.9,
+    18.8
+   ],
+   "cgmacros-017": [
+    14.9,
+    17.2
+   ],
+   "cgmacros-038": [
+    25.1,
+    29.0
+   ],
+   "cgmacros-043": [
+    19.4,
+    22.1
+   ],
+   "cgmacros-045": [
+    35.7,
+    41.8
+   ]
+  },
+  "people_better_than_A": 8
+ },
+ "chronos2": {
+  "all": {
+   "n": 25030,
+   "t30": 17.74,
+   "t60": 25.47,
+   "A_t60": 26.96
+  },
+  "meal_next_hour": {
+   "n": 3706,
+   "t30": 16.28,
+   "t60": 34.81,
+   "A_t60": 35.73
+  },
+  "rising": {
+   "n": 1248,
+   "t30": 31.32,
+   "t60": 40.81,
+   "A_t60": 41.61
+  },
+  "t60_gain_vs_A": 1.49,
+  "t60_gain_vs_A_ci95": [
+   0.88,
+   2.0
+  ],
+  "coverage80_t60": 0.801,
+  "per_person_t60_vs_A": {
+   "cgmacros-003": [
+    25.2,
+    27.2
+   ],
+   "cgmacros-008": [
+    27.5,
+    28.7
+   ],
+   "cgmacros-009": [
+    24.4,
+    24.1
+   ],
+   "cgmacros-014": [
+    25.6,
+    26.7
+   ],
+   "cgmacros-016": [
+    17.4,
+    18.8
+   ],
+   "cgmacros-017": [
+    15.7,
+    17.2
+   ],
+   "cgmacros-038": [
+    26.7,
+    29.0
+   ],
+   "cgmacros-043": [
+    21.3,
+    22.1
+   ],
+   "cgmacros-045": [
+    39.0,
+    41.8
+   ]
+  },
+  "people_better_than_A": 8
+ },
+ "criterion_t60_gain_ci_lower_above_0": true,
+ "coverage_in_0.75_0.85": true
+}

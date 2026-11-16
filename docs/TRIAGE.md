@@ -439,6 +439,65 @@ what-ifs come from the hybrid (`scenarios.HybridMeal`). The default stays the fo
 needs the level-setter retrained and re-tested. Triage levels from the rule (no-meal and history-only forecasts) are
 unaffected either way.
 
+## 11. Better forecasts: boosted trees with personal history + Chronos-2 (confirmed on 9 locked people)
+
+**How the model was found.** By trial and error in `model/cgmacros/lab.py`, under a protocol fixed before the first
+trial:
+- **Dev set:** the primary held-out 12 people.
+- **Target:** forecasts made with no future-meal information, which is what triage uses.
+- **Bar:** the TFT A forecaster.
+- **Log:** every trial is in `model/results/lab_log.jsonl`. There were 14 trials, covering the five families in
+  TRIAGE_LITERATURE.md §8.
+
+**Dev results** (T+60 RMSE; TFT A scored 27.7):
+
+| Trial | T+60 |
+|---|---|
+| Boosted trees, 2-h features | 25.7 |
+| + 24-h context | 23.9 |
+| + personal history | 24.3 |
+| + both (`hgb_long_person`) | 23.6 |
+| + retrieval of similar past windows | 23.6 (no gain) |
+| Chronos-2, zero-shot | 26.0 |
+| Fixed 70/30 blend of `hgb_long_person` and Chronos-2 | 23.3 |
+
+Leak checks passed: recomputing every new feature with all later data deleted (or the outcomes replaced with garbage)
+left it unchanged.
+
+**Locked test** (`model/cgmacros/lab_confirm.py`, pre-registered in `7a9e36f`):
+- **Primary model:** the blend, refit on the 31 confirm-training people.
+- **Test set:** the 9 confirm-test people, 25,030 windows. This is their fifth confirmatory use.
+- **Criterion:** a T+60 gain over the confirm TFT A whose 95% person-bootstrap interval stays above 0.
+
+| 9 locked people | T+30 | T+60 | Gain vs A, 95% CI | Rising windows T+60 | Meal next hour T+60 | 80% coverage | Better than A |
+|---|---|---|---|---|---|---|---|
+| TFT A (current) | 18.5 | 26.96 | — | 41.6 | 35.7 | — | — |
+| **Blend (pre-registered)** | **15.7** | **22.46** | **+4.5 [3.3, 5.6]** | **35.8** | 31.3 | 0.773 | **9 of 9** |
+| `hgb_long_person` alone | 15.8 | 22.89 | +4.1 [2.4, 5.4] | 36.2 | 30.8 | 0.859 | 8 of 9 |
+| Chronos-2 alone (zero-shot) | 17.7 | 25.47 | +1.5 [0.9, 2.0] | 40.8 | 34.8 | 0.801 | 8 of 9 |
+
+- **Pre-registered result: confirmed.**
+  - T+60 RMSE fell from 26.96 to 22.46 (-17%), and the interval excludes 0.
+  - The band covered 77.3% of outcomes, inside the pre-set 0.75-0.85.
+  - The blend beat A for every one of the 9 people.
+  - The locked gain (+4.5) matched dev rather than shrinking.
+  - For context: §1's TFT D, which is *told* the future meals, scored 23.07.
+- **Where the gain comes from:** context the TFT never saw. Its 2-h window is normalized per window, so it lacks the
+  last 24 h of glucose, the person's usual level, and how they responded to earlier meals. Chronos-2 adds calibrated
+  bands and a little accuracy.
+- **Rising windows** (the spikes behind most urgent misses) improved from 41.6 to 35.8. That is real but still large:
+  a spike from a flat start remains hard without knowing about the meal.
+- **Not tested: triage levels.**
+  - The rule's thresholds and the level-setter were built on TFT outputs.
+  - Swapping in this forecaster changes urgent and monitor calls. That needs its own pre-registered test (urgent
+    recall and false alarms) before deployment.
+  - The 9 people have now been used five times, so that test needs new people or a new dataset.
+- **Operational cost:**
+  - Chronos-2 runs in its own environment (`.venv-chronos`, `chronos-forecasting==2.0.1`, revision pinned in
+    `chronos_run.py`).
+  - It took about 17 minutes on CPU for 25k windows, about 40 ms per forecast.
+  - `hgb_long_person` alone keeps most of the gain (+4.1) with no extra dependency, but its band is too wide (0.86).
+
 ## Limits
 
 - Population: adults without insulin therapy; nothing here transfers to type 1 diabetes.
