@@ -29,6 +29,26 @@ hour were looked at to choose the night secondary):
               (night lows include sensor-compression artifacts); monitor calls; under/over-triage; T+60 RMSE of NEW vs
               A vs D (per dataset, person-bootstrap); highs are NOT testable (3 events in both datasets).
   Power       urgent moments and the people they come from are printed by --prepare before scoring.
+
+PRE-REGISTERED, 5-MIN ALARMS (written 2026-11-16 after the triage result above and before any alarm stream was run on
+these people; their second use; run with --alarms):
+  Question    which alarm, checked at every 5-min reading, warns of lows early with the fewest false alarms?
+  Streams     event_model (model/cgmacros/event.py, fit on the 31 confirm-training people, its pre-registered
+              threshold; replay.event_model_stream), alert20 (15-min slope projected 20 min, replay.alert20), and
+              threshold (reactive reference). Nothing is refit or tuned on these people.
+  Scoring     unchanged from model/cgmacros/replay.py: events = >= 3 readings < 70 or > 250 in a gap-free segment,
+              timely = an in-range alarm >= 15 min before onset within 60 min, false alarm = an alarm episode (30-min
+              lockout) with no onset in the next 60 min, per day of readings; each stream against its own
+              rate-matched random baseline (20 seeds). Lows only are claimed (3 highs in both datasets).
+  Primary     event_model vs alert20 on all 73 people, both of:
+                1. fewer false alarms: 95% person-bootstrap interval of (alert20 - event_model) false alarms/day
+                   excludes 0 (above 0);
+                2. timely share non-inferior: lower bound of (event_model - alert20) timely share > -0.10.
+  Secondary   each stream vs its random baseline; per dataset; daytime only (readings 06:00-24:00 local clock,
+              re-segmented; night lows include sensor-compression artifacts); median lead.
+  Disclosed   heart rate / METs resting defaults; Hall has no meal logs (meal features 0); hour-of-day here is real
+              clock time while CGMacros timestamps were shifted, so the event model's hour features are out of
+              distribution; the rule-every-5-min arm is not run (TFT at ~142k readings).
 """
 from __future__ import annotations
 
@@ -210,17 +230,63 @@ def score() -> None:
     print(json.dumps({k: v for k, v in out.items() if k != "preregistration"}, indent=1))
 
 
+def alarms() -> None:
+    from model.cgmacros import replay as R
+    ext = pd.read_pickle(EXT)
+    people = sorted(ext.participant.unique())
+    em = R.event_model_stream()
+    streams = {"event_model": em, "alert20": lambda p, f: R.alert20(f["glucose"].to_numpy(dtype=float)),
+               "threshold": lambda p, f: R.threshold(f["glucose"].to_numpy(dtype=float))}
+
+    def evaluate(grid_df):
+        frames = list(R.segments(grid_df, people))
+        per = R.run(frames, streams)
+        ps = [p for p in people if p in per["alert20"]]
+        res = {n: R.summarize(per[n], ps) for n in per}
+        for n in per:
+            res[n]["timely_minus_random_ci95"] = R.boot(per[n], None, ps)
+        res["event_minus_alert20_timely_ci95"] = R.boot(per["event_model"], per["alert20"], ps)
+        rng, d = np.random.default_rng(0), []
+        for _ in range(2000):
+            pick = rng.choice(ps, len(ps))
+            days = sum(per["alert20"][p]["readings"] for p in pick) * R.DT / 1440
+            d.append((sum(per["alert20"][p]["fa"] for p in pick) - sum(per["event_model"][p]["fa"] for p in pick))
+                     / days)
+        res["alert20_minus_event_fa_per_day_ci95"] = [round(float(np.percentile(d, 2.5)), 2),
+                                                      round(float(np.percentile(d, 97.5)), 2)]
+        for ds in ("bigideas", "hall"):
+            sub = [p for p in ps if p.startswith(ds)]
+            res[ds] = {n: R.summarize(per[n], sub) for n in per}
+        return res
+
+    out = {"preregistration": __doc__.split("PRE-REGISTERED, 5-MIN ALARMS")[1].strip(), "all": evaluate(ext)}
+    day = ext[ext.ts.dt.hour >= 6].copy()
+    day["time_idx"] = day.groupby("participant").cumcount() + day.groupby("participant")["time_idx"].transform(
+        lambda t: (t.diff().fillna(1) != 1).cumsum() * 10 ** 6)          # new segment wherever night was removed
+    out["daytime_only"] = evaluate(day)
+    a = out["all"]
+    out["criterion_1_fewer_false_alarms"] = bool(a["alert20_minus_event_fa_per_day_ci95"][0] > 0)
+    out["criterion_2_timely_noninferior"] = bool(a["event_minus_alert20_timely_ci95"][0] > -0.10)
+    out["confirmed"] = out["criterion_1_fewer_false_alarms"] and out["criterion_2_timely_noninferior"]
+    path = ROOT / "model" / "results" / "cgmacros_external_alarms.json"
+    path.write_text(json.dumps(out, indent=1) + "\n")
+    print(json.dumps({k: v for k, v in out.items() if k != "preregistration"}, indent=1, default=str))
+
+
 def main() -> int:
     if SCHEME != "confirm":
         raise SystemExit("run with CGMACROS_SPLIT=confirm (frozen confirm-split models)")
     ap = argparse.ArgumentParser()
     ap.add_argument("--prepare", action="store_true")
     ap.add_argument("--score", action="store_true")
+    ap.add_argument("--alarms", action="store_true")
     a = ap.parse_args()
     if a.prepare:
         prepare()
     if a.score:
         score()
+    if a.alarms:
+        alarms()
     return 0
 
 
