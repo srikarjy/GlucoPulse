@@ -1,0 +1,150 @@
+{
+ "preregistration": "(written 2026-11-16, before any forecast for these 73 people was computed; event counts by person and\nhour were looked at to choose the night secondary):\n  Models      frozen, nothing refit or tuned on these people: TFT A (glucose only) and TFT D (no_new_meal) from the\n              confirm-split checkpoints; the new forecaster = 0.7 x hgb_long_person (fit on the 31 confirm-training\n              people) + 0.3 x Chronos-2 (chronos-forecasting 2.0.1, amazon/chronos-2 rev 29ec3766..., 512 readings),\n              band = Chronos-2 offsets. Change from sections 11-12: HGB is fit for all 12 steps (same recipe per step),\n              because the rule reads the whole hour.\n  Missing     heart rate and METs are resting defaults (not observed) in both datasets; Hall has no meals. Identical\n              for every arm. The personal-history features start from zero for each person, as for a new user.\n  Moments     every 6th valid window per person (30 min apart): 2 h contiguous history and a contiguous next hour.\n              Label = outcome_label (urgent: sustained < 70 or > 250 within 60 min).\n  Arms        current = rule_level(current, TFT D no_new_meal, TFT A history_only)\n              new     = rule_level(current, NEW forecaster,      TFT A history_only)\n              (A stays in the history_only slot, which is the safety floor of section 12 inside the rule)\n  Primary     on all 73 people, both of:\n                1. urgent recall non-inferior: 95% person-bootstrap lower bound of (new - current) > -0.05;\n                2. urgent false alarms (non-urgent moments called urgent) at most 2.0 points higher.\n  Secondary   per dataset; recall on urgent moments not already out of range at as_of; excluding as_of 00:00-06:00\n              (night lows include sensor-compression artifacts); monitor calls; under/over-triage; T+60 RMSE of NEW vs\n              A vs D (per dataset, person-bootstrap); highs are NOT testable (3 events in both datasets).\n  Power       urgent moments and the people they come from are printed by --prepare before scoring.",
+ "all_73": {
+  "moments": 18294,
+  "urgent": 819,
+  "urgent_people": 48,
+  "cur": {
+   "urgent_recall": 0.615,
+   "urgent_false_alarm": 0.0228,
+   "monitor_or_higher_when_routine": 0.2008,
+   "under_triage": 0.0301,
+   "over_triage": 0.1925
+  },
+  "new": {
+   "urgent_recall": 0.585,
+   "urgent_false_alarm": 0.0179,
+   "monitor_or_higher_when_routine": 0.2019,
+   "under_triage": 0.0314,
+   "over_triage": 0.1922
+  },
+  "recall_diff_ci95": [
+   -0.042,
+   -0.016
+  ]
+ },
+ "bigideas": {
+  "moments": 5880,
+  "urgent": 52,
+  "urgent_people": 6,
+  "cur": {
+   "urgent_recall": 0.5,
+   "urgent_false_alarm": 0.0098,
+   "monitor_or_higher_when_routine": 0.1314,
+   "under_triage": 0.0224,
+   "over_triage": 0.1277
+  },
+  "new": {
+   "urgent_recall": 0.442,
+   "urgent_false_alarm": 0.0069,
+   "monitor_or_higher_when_routine": 0.1305,
+   "under_triage": 0.0235,
+   "over_triage": 0.1265
+  },
+  "recall_diff_ci95": [
+   -0.102,
+   0.0
+  ]
+ },
+ "hall": {
+  "moments": 12414,
+  "urgent": 767,
+  "urgent_people": 42,
+  "cur": {
+   "urgent_recall": 0.623,
+   "urgent_false_alarm": 0.0293,
+   "monitor_or_higher_when_routine": 0.2359,
+   "under_triage": 0.0337,
+   "over_triage": 0.2232
+  },
+  "new": {
+   "urgent_recall": 0.595,
+   "urgent_false_alarm": 0.0234,
+   "monitor_or_higher_when_routine": 0.2378,
+   "under_triage": 0.0351,
+   "over_triage": 0.2233
+  },
+  "recall_diff_ci95": [
+   -0.04,
+   -0.015
+  ]
+ },
+ "not_out_of_range_at_as_of": {
+  "moments": 17744,
+  "urgent": 411,
+  "urgent_people": 46,
+  "cur": {
+   "urgent_recall": 0.234,
+   "urgent_false_alarm": 0.0148,
+   "monitor_or_higher_when_routine": 0.1988,
+   "under_triage": 0.031,
+   "over_triage": 0.1905
+  },
+  "new": {
+   "urgent_recall": 0.173,
+   "urgent_false_alarm": 0.0098,
+   "monitor_or_higher_when_routine": 0.1999,
+   "under_triage": 0.0323,
+   "over_triage": 0.1901
+  },
+  "recall_diff_ci95": [
+   -0.086,
+   -0.031
+  ]
+ },
+ "excluding_night_00_06": {
+  "moments": 13309,
+  "urgent": 631,
+  "urgent_people": 47,
+  "cur": {
+   "urgent_recall": 0.596,
+   "urgent_false_alarm": 0.0273,
+   "monitor_or_higher_when_routine": 0.241,
+   "under_triage": 0.034,
+   "over_triage": 0.2289
+  },
+  "new": {
+   "urgent_recall": 0.559,
+   "urgent_false_alarm": 0.0211,
+   "monitor_or_higher_when_routine": 0.2423,
+   "under_triage": 0.0356,
+   "over_triage": 0.2286
+  },
+  "recall_diff_ci95": [
+   -0.051,
+   -0.018
+  ]
+ },
+ "t60_rmse": {
+  "all_73": {
+   "new": 17.53,
+   "A": 19.23,
+   "D_no_meal": 19.27,
+   "gain_new_vs_A_ci95": [
+    1.29,
+    2.05
+   ]
+  },
+  "bigideas": {
+   "new": 18.4,
+   "A": 21.02,
+   "D_no_meal": 20.82,
+   "gain_new_vs_A_ci95": [
+    2.26,
+    2.98
+   ]
+  },
+  "hall": {
+   "new": 17.1,
+   "A": 18.32,
+   "D_no_meal": 18.49,
+   "gain_new_vs_A_ci95": [
+    0.76,
+    1.69
+   ]
+  }
+ },
+ "criterion_1_recall_noninferior": true,
+ "criterion_2_false_alarm_at_most_2pt": true,
+ "confirmed": true
+}

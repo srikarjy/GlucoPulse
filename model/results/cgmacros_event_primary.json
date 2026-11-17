@@ -1,0 +1,133 @@
+{
+ "scheme": "primary",
+ "status": "EXPLORATORY",
+ "preregistration": "(written 2026-11-16, before any event-model output for the test people was computed):\n  Training     the 31 confirm-split training people, every 30-min moment (same candidate_moments and outcome_label as\n               the eval cases). Target: urgent (sustained > 250 or sustained < 70 within 60 min).\n  Features     history only, ending at as_of: current glucose; changes over 5/10/15/30/60 min; 30-min least-squares\n               slope; acceleration (last 15-min change minus the previous 15-min change); 2-h min/max/mean/sd;\n               hour of day (sin, cos); carbs logged in 2 h; minutes since and carbs of the last logged meal; 30-min\n               mean heart rate (missing if unobserved) and METs.\n  Model        HistGradientBoostingClassifier(max_iter=300, learning_rate=0.05, max_leaf_nodes=15,\n               l2_regularization=1.0, class_weight=\"balanced\", random_state=0). No tuning.\n  Threshold t  from 5-fold GroupKFold (by person) out-of-fold probabilities on the training people only: the smallest\n               t whose specificity on non-urgent moments is >= 0.985 (the rule's urgent specificity on the primary\n               12-person pool, model/results/cgmacros_ceiling.json). Test labels are never used to set t.\n  Policy       \"event\": urgent if the rule says urgent OR P(urgent) >= t; otherwise the rule's level.\n  Comparator   \"trend\" (fixed now, not tuned): urgent if the rule says urgent OR current + 4 x (15-min change) > 250\n               or < 70; otherwise the rule's level.\n  Criteria     on the 9 NEW people, versus the rule, BOTH of:\n                 1. urgent recall higher, with the 95% participant-bootstrap interval of the gain excluding 0;\n                 2. urgent false-alarm rate (non-urgent moments called urgent) at most 2 points higher.\n               Power (simulated from the rule's misses): a gain of about +15 points is needed for the interval to\n               exclude 0 reliably; smaller real gains will likely read as inconclusive.\n  Secondary    event vs trend (interval of the recall difference); highs and lows separately; AUROC; under/over-triage\n               and urgent hours called routine; everything on all 14 people the new forecaster never trained on\n               (9 new + 5 early-stopping people; the rule's forecasts are mildly optimistic on the 5).\n  Exploratory  the primary split (train 33 -> held-out 12). Those 12 people's eval cases were used to explore\n               thresholds before this was written, so that run is development, not evidence.",
+ "features": [
+  "now",
+  "d5",
+  "d10",
+  "d15",
+  "d30",
+  "d60",
+  "slope30",
+  "accel",
+  "min2h",
+  "max2h",
+  "mean2h",
+  "sd2h",
+  "hour_sin",
+  "hour_cos",
+  "carbs2h",
+  "meal_min_ago",
+  "meal_carbs",
+  "hr30",
+  "mets30"
+ ],
+ "threshold": 0.7693581379542035,
+ "training": {
+  "people": 33,
+  "moments": 14886,
+  "oof_auroc": 0.952,
+  "oof_specificity": 0.985,
+  "oof_recall": 0.674
+ },
+ "test_7_people": {
+  "moments": 3244,
+  "urgent": 42,
+  "urgent_people": 3,
+  "rule_recall": 0.548,
+  "recall": 0.738,
+  "trend_recall": 0.833,
+  "recall_gain_vs_rule_ci95": [
+   0.0,
+   0.333
+  ],
+  "recall_diff_vs_trend_ci95": [
+   -0.2,
+   0.0
+  ],
+  "rule_false_alarm": 0.007,
+  "false_alarm": 0.012,
+  "trend_false_alarm": 0.131,
+  "high": {
+   "n": 37,
+   "rule": 0.568,
+   "event": 0.784,
+   "trend": 0.865
+  },
+  "low": {
+   "n": 5,
+   "rule": 0.4,
+   "event": 0.4,
+   "trend": 0.6
+  },
+  "auroc": 0.97,
+  "under_triage": {
+   "rule": 0.042,
+   "event": 0.039,
+   "trend": 0.035
+  },
+  "over_triage": {
+   "rule": 0.117,
+   "event": 0.123,
+   "trend": 0.196
+  },
+  "urgent_called_routine": {
+   "rule": 4,
+   "event": 3,
+   "trend": 4
+  }
+ },
+ "all_held_out_people": {
+  "moments": 5590,
+  "urgent": 256,
+  "urgent_people": 7,
+  "rule_recall": 0.625,
+  "recall": 0.723,
+  "trend_recall": 0.777,
+  "recall_gain_vs_rule_ci95": [
+   0.063,
+   0.172
+  ],
+  "recall_diff_vs_trend_ci95": [
+   -0.115,
+   -0.028
+  ],
+  "rule_false_alarm": 0.015,
+  "false_alarm": 0.023,
+  "trend_false_alarm": 0.134,
+  "high": {
+   "n": 229,
+   "rule": 0.642,
+   "event": 0.751,
+   "trend": 0.786
+  },
+  "low": {
+   "n": 27,
+   "rule": 0.481,
+   "event": 0.481,
+   "trend": 0.704
+  },
+  "auroc": 0.964,
+  "under_triage": {
+   "rule": 0.05,
+   "event": 0.046,
+   "trend": 0.04
+  },
+  "over_triage": {
+   "rule": 0.126,
+   "event": 0.133,
+   "trend": 0.196
+  },
+  "urgent_called_routine": {
+   "rule": 15,
+   "event": 14,
+   "trend": 15
+  }
+ },
+ "criteria": {
+  "1_recall_gain_ci_excludes_0": false,
+  "2_false_alarm_increase_at_most_2_points": true
+ },
+ "confirmed": false
+}

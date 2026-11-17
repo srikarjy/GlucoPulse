@@ -1,0 +1,275 @@
+{
+ "scheme": "primary",
+ "set": "dev 12",
+ "windows": 33517,
+ "blend": {
+  "rmse": 23.26,
+  "coverage80": 0.792,
+  "clarke": {
+   "A": 0.8382,
+   "B": 0.1543,
+   "C": 0.0,
+   "D": 0.0075,
+   "E": 0.0
+  },
+  "clarke_A_plus_B": 0.9925,
+  "by_actual_range": {
+   "<70": {
+    "n": 72,
+    "rmse": 47.6,
+    "bias": 44.0,
+    "coverage80": 0.278
+   },
+   "70-180": {
+    "n": 28709,
+    "rmse": 17.3,
+    "bias": 3.5,
+    "coverage80": 0.812
+   },
+   "180-250": {
+    "n": 3770,
+    "rmse": 37.5,
+    "bias": -17.4,
+    "coverage80": 0.708
+   },
+   ">250": {
+    "n": 966,
+    "rmse": 65.3,
+    "bias": -46.9,
+    "coverage80": 0.549
+   }
+  },
+  "extremes": {
+   "lows_reached_by_p10": 0.431,
+   "highs_reached_by_p90": 0.718,
+   "lows_reached_by_median": 0.028,
+   "highs_reached_by_median": 0.377
+  },
+  "cold_start": {
+   "day_1": {
+    "n": 3133,
+    "rmse": 27.17,
+    "coverage80": 0.765
+   },
+   "day_2": {
+    "n": 3456,
+    "rmse": 24.07,
+    "coverage80": 0.817
+   },
+   "day_3_plus": {
+    "n": 26928,
+    "rmse": 22.66,
+    "coverage80": 0.792
+   }
+  },
+  "people": {
+   "cgmacros-004": {
+    "n": 2819,
+    "rmse": 15.8,
+    "coverage80": 0.809,
+    "sd_actual": 17.9
+   },
+   "cgmacros-005": {
+    "n": 2821,
+    "rmse": 26.0,
+    "coverage80": 0.759,
+    "sd_actual": 33.6
+   },
+   "cgmacros-010": {
+    "n": 2821,
+    "rmse": 19.1,
+    "coverage80": 0.831,
+    "sd_actual": 22.2
+   },
+   "cgmacros-011": {
+    "n": 2821,
+    "rmse": 19.1,
+    "coverage80": 0.824,
+    "sd_actual": 21.3
+   },
+   "cgmacros-013": {
+    "n": 2819,
+    "rmse": 21.2,
+    "coverage80": 0.808,
+    "sd_actual": 21.4
+   },
+   "cgmacros-019": {
+    "n": 2783,
+    "rmse": 16.6,
+    "coverage80": 0.765,
+    "sd_actual": 17.0
+   },
+   "cgmacros-022": {
+    "n": 2819,
+    "rmse": 16.0,
+    "coverage80": 0.809,
+    "sd_actual": 17.3
+   },
+   "cgmacros-026": {
+    "n": 2696,
+    "rmse": 26.4,
+    "coverage80": 0.8,
+    "sd_actual": 27.8
+   },
+   "cgmacros-031": {
+    "n": 2700,
+    "rmse": 14.9,
+    "coverage80": 0.792,
+    "sd_actual": 18.2
+   },
+   "cgmacros-035": {
+    "n": 2783,
+    "rmse": 33.6,
+    "coverage80": 0.827,
+    "sd_actual": 46.1
+   },
+   "cgmacros-036": {
+    "n": 2821,
+    "rmse": 32.2,
+    "coverage80": 0.693,
+    "sd_actual": 47.2
+   },
+   "cgmacros-041": {
+    "n": 2814,
+    "rmse": 27.7,
+    "coverage80": 0.783,
+    "sd_actual": 40.3
+   }
+  }
+ },
+ "tft_A": {
+  "rmse": 27.72,
+  "coverage80": 0.806,
+  "clarke": {
+   "A": 0.7917,
+   "B": 0.1992,
+   "C": 0.0007,
+   "D": 0.0083,
+   "E": 0.0002
+  },
+  "clarke_A_plus_B": 0.9908,
+  "by_actual_range": {
+   "<70": {
+    "n": 72,
+    "rmse": 36.8,
+    "bias": 21.3,
+    "coverage80": 0.597
+   },
+   "70-180": {
+    "n": 28709,
+    "rmse": 21.2,
+    "bias": 0.1,
+    "coverage80": 0.832
+   },
+   "180-250": {
+    "n": 3770,
+    "rmse": 44.7,
+    "bias": -19.0,
+    "coverage80": 0.675
+   },
+   ">250": {
+    "n": 966,
+    "rmse": 73.2,
+    "bias": -51.2,
+    "coverage80": 0.561
+   }
+  },
+  "extremes": {
+   "lows_reached_by_p10": 0.694,
+   "highs_reached_by_p90": 0.731,
+   "lows_reached_by_median": 0.306,
+   "highs_reached_by_median": 0.388
+  },
+  "cold_start": {
+   "day_1": {
+    "n": 3133,
+    "rmse": 30.5,
+    "coverage80": 0.777
+   },
+   "day_2": {
+    "n": 3456,
+    "rmse": 30.28,
+    "coverage80": 0.799
+   },
+   "day_3_plus": {
+    "n": 26928,
+    "rmse": 27.02,
+    "coverage80": 0.811
+   }
+  },
+  "people": {
+   "cgmacros-004": {
+    "n": 2819,
+    "rmse": 19.7,
+    "coverage80": 0.818,
+    "sd_actual": 17.9
+   },
+   "cgmacros-005": {
+    "n": 2821,
+    "rmse": 30.0,
+    "coverage80": 0.817,
+    "sd_actual": 33.6
+   },
+   "cgmacros-010": {
+    "n": 2821,
+    "rmse": 24.1,
+    "coverage80": 0.817,
+    "sd_actual": 22.2
+   },
+   "cgmacros-011": {
+    "n": 2821,
+    "rmse": 22.5,
+    "coverage80": 0.829,
+    "sd_actual": 21.3
+   },
+   "cgmacros-013": {
+    "n": 2819,
+    "rmse": 25.9,
+    "coverage80": 0.781,
+    "sd_actual": 21.4
+   },
+   "cgmacros-019": {
+    "n": 2783,
+    "rmse": 19.6,
+    "coverage80": 0.831,
+    "sd_actual": 17.0
+   },
+   "cgmacros-022": {
+    "n": 2819,
+    "rmse": 20.4,
+    "coverage80": 0.853,
+    "sd_actual": 17.3
+   },
+   "cgmacros-026": {
+    "n": 2696,
+    "rmse": 31.7,
+    "coverage80": 0.782,
+    "sd_actual": 27.8
+   },
+   "cgmacros-031": {
+    "n": 2700,
+    "rmse": 18.6,
+    "coverage80": 0.838,
+    "sd_actual": 18.2
+   },
+   "cgmacros-035": {
+    "n": 2783,
+    "rmse": 38.1,
+    "coverage80": 0.78,
+    "sd_actual": 46.1
+   },
+   "cgmacros-036": {
+    "n": 2821,
+    "rmse": 35.4,
+    "coverage80": 0.742,
+    "sd_actual": 47.2
+   },
+   "cgmacros-041": {
+    "n": 2814,
+    "rmse": 36.2,
+    "coverage80": 0.789,
+    "sd_actual": 40.3
+   }
+  }
+ }
+}

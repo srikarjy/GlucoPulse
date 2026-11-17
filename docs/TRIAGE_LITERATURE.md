@@ -72,6 +72,70 @@ read from the full text; "abstract" means only the abstract was seen. Searched 2
   LLMs express verified facts within bounded interfaces." *Relevance:* the same split our results point to, and the
   same mechanism as our grounding check (which removed ~45% of agent claims).
 
+## 6. Warn early from the CGM stream: published alert and meal-detection algorithms
+
+- **Harvey, Dassau, Zisser, Seborg, Doyle, J Diabetes Sci Technol (2014), doi:10.1177/1932296814523881.** *Read
+  (equations, from PMC).* The Glucose Rate Increase Detector (GRID): noise-spike filter (3 mg/dL/min), first-order
+  low-pass filter, 3-point Lagrangian derivative, detection if filtered glucose > 130 mg/dL and the last 3 rates
+  > 1.5 or the last 2 > 1.6 mg/dL/min (tau_F = 6 min). Tuned on type 1 diabetes. *Relevance:* implemented exactly in
+  `model/cgmacros/replay.py`; the trigger for a meal prompt or re-triage.
+- **Hochsmann et al., Scientific Reports (2026), doi:10.1038/s41598-026-50699-5.** *Read (methods, results).* Nine
+  published CGM-only meal detectors on 16 healthy adults, free-living, with a shared protocol: 120-min match
+  window, 120-min lockout after a true positive. GRID: 70.4% sensitivity, 0.26 false positives/day, 37 min to
+  detection; rate-of-change detectors are fastest but least sensitive. *Relevance:* our matching rules and our
+  reference numbers; GRID's healthy-adult tuning is our secondary.
+- **Dassau, Bequette, Buckingham, Doyle, Diabetes Care (2008), doi:10.2337/dc07-1293.** *Abstract only.* The first
+  CGM meal-detection algorithm (voting on rate and acceleration): meals detected about 30 min after eating began,
+  when glucose was ~21 mg/dL above baseline. *Relevance:* the time scale: a meal is visible on the CGM within ~30 min,
+  long before a spike peaks, which is why checking every 5 min matters more than a better one-off model.
+
+## 7. Physiology-structured forecasting (the meal what-if)
+
+- **Miller, Foti, Fox (Apple), MLHC 2020, arXiv:2008.02852, "Learning Insulin-Glucose Dynamics in the Wild."**
+  *Read (methods, results).*
+  - **Method:** the UVA/Padova type 1 diabetes simulator, with its parameters (insulin sensitivity, endogenous glucose
+    production) allowed to vary over time, driven by a latent sequence model ("DTD-Sim").
+  - **Data:** 2 people with type 1 diabetes, CGM plus pump data from HealthKit, about 150 days each.
+  - **Accuracy:** LSTM and ARMA were best at 5-30 min. DTD-Sim beat the LSTM by 5% at 1 h, 27% at 2 h and 36% at
+    6 h.
+  - **What-if forecasts:** the LSTM ignored insulin; DTD-Sim responded plausibly to both carbs and insulin.
+  - *Relevance:* our meal what-ifs have the LSTM's problem (meal forecasts dipping below no-meal; 30 g above 60 g).
+    `model/cgmacros/hybrid.py` keeps only the meal part, since CGMacros has no insulin. Expect a fix to the what-if
+    forecasts, not much accuracy gain at 60 min.
+- **Hovorka et al., Physiol Meas (2004), doi:10.1088/0967-3334/25/4/010.** *Abstract; equations via Pompa et al.
+  2021, doi:10.1371/journal.pone.0257789 (read).* Gut absorption is a two-compartment chain:
+  `U_G(t) = D2(t) / tau_D`, `tau_D = 40 min`, carbohydrate bioavailability `A_G = 0.8`. This is the fixed meal-curve
+  shape in the hybrid.
+
+## 8. Better 30-60 min forecasts: what has worked elsewhere (searched 2026-11-16, abstracts unless noted)
+
+- **Zhang et al. (2026), arXiv:2609.11872.** *Abstract.* Eight CGM datasets (T1D, T2D, no diabetes).
+  - Zero-shot foundation models did not beat strong task-specific baselines (Elastic Net, PatchTST).
+  - Lightly fine-tuned Chronos-Bolt cut RMSE 8.6-18.2% in the non-diabetes/T2D cohort.
+  - On CGMacros, residual fusion of meal context cut post-meal RMSE about 15%.
+- **GlucoFM-Bench (2026), arXiv:2606.06881.** *Abstract.* 15 datasets, 1,117 people. Chronos-2 and TimesFM zero-shot
+  came within 5% of the best fully trained model. With plenty of data, a lightweight LSTM was best, by 4-21%.
+- **GlucoAgent (2026), arXiv:2611.04126** (section 2). On CGMacros: Chronos-2 averaged 23.5 RMSE over 30-120 min.
+  Generated code that retrieves similar past meals and back-tests per-person models reached 22.5; post-meal 60-min
+  RMSE went from 31.0 to 26.5.
+- **Retrieval of similar past episodes:**
+  - GlyRAG (2026), arXiv:2601.05353, *abstract*: 60-min RMSE on OhioT1DM went from 23.1 (PatchTST) to 20.2.
+  - RAFT / "Retrieval Mechanisms Surpass Long-Context Scaling" (2026), arXiv:2605.08217, *abstract*: longer raw
+    context hurt (inverse scaling); retrieving relevant past segments helped.
+- **Personal traits are learnable quickly.**
+  - doi:10.64898/2026.09.14.26362991, *abstract*: 50,463 free-living meals from 992 adults without diabetes. Two
+    stable per-person response axes; 3 days of data approximated 14.
+  - Incrementally retrained LSTM (PMC11999170), *abstract*: adapting to each person's own data cut 30-min RMSE
+    14.6 -> 10.2 (T1D).
+- **Reproducibility warning:** PMC13541153, *abstract*. 8 deep models re-run on 128 people: errors depended strongly on
+  each person's glycemic control, and generalization across datasets was limited.
+- **Ranking for this project (cheapest, best-supported first):**
+  1. Strong simple baselines: ridge/Elastic Net or boosted trees, direct multi-horizon.
+  2. Per-person adaptation from the person's own earlier days. Our personalized meal gain already helped (§10).
+  3. Chronos-2 / Chronos-Bolt, zero-shot then lightly fine-tuned.
+  4. Retrieval of the person's similar past windows.
+  5. Ensembles.
+
 ## What this suggests for the panel
 
 1. The level should come from a rule or a small classifier (section 5 of `TRIAGE.md`), not from the LLM vote.

@@ -232,6 +232,469 @@ Read with care:
 `level_source="levelsetter"`. It is **not** the default: fewer misses overall for ~2 points more alarms is a trade
 for a clinician to accept. In that mode the LLM explains and cannot raise the level.
 
+## 8. Event model: predict the urgent event directly (not confirmed)
+
+Why: on the 98 eval cases the forecaster's 60-min median barely continued a rise (of 20 cases rising >= 20 mg/dL per
+15 min, 14 had a median at or below the current reading; the other 6 rose by at most 16 mg/dL), and the rule calls urgent only when that median crosses 250.
+The label asks whether the path crosses at any time, which the median understates by construction.
+
+`python -m model.cgmacros.event` trains a gradient-boosted classifier on the urgent event itself, from glucose history
+only (levels, 5-60 min changes, slope, acceleration, 2-h range, meals, heart rate), on the forecaster's 31 training
+people. The threshold comes from their out-of-fold predictions (target specificity 0.985), never from test labels.
+Policy: urgent if the rule says urgent or the event model fires; otherwise the rule's level. Comparator fixed in
+advance: urgent if the current reading + 4 x the 15-min change is outside 70-250. The protocol was committed
+(`e4c1958`) before any output for the test people was computed.
+
+| Urgent hours (rule floor kept) | Rule recall | Event recall | Gain, 95% CI by person | False alarms rule -> event | Trend recall / false alarms |
+|---|---|---|---|---|---|
+| **9 new people (pre-registered)**, 88 urgent from 6 people | .705 | .739 | +3.4 pts [0.0, 10.0] | 1.1% -> 1.9% | .784 / 11.8% |
+| All 14 confirm held-out people (secondary), 277 urgent | .650 | .726 | +7.6 pts [1.6, 9.7] | 1.5% -> 2.5% | .765 / 12.7% |
+| Primary held-out 12 (exploratory), 256 urgent | .625 | .723 | +9.8 pts [6.3, 17.2] | 1.5% -> 2.3% | .777 / 13.4% |
+
+- **Pre-registered result: not confirmed.** Criterion 2 (false alarms at most 2 points higher) passed; criterion 1
+  failed. Because the policy is "rule OR model" it can only add urgent calls, so the gain is never negative and a
+  lower bound of exactly 0 is not a near miss: in at least 2.5% of person-resamples there was no gain at all, because
+  the gain sits in few people. The pre-run power check (which spread extra hits evenly across people, so it was
+  optimistic) said about +15 points was needed; the observed gain was 3.4.
+- **The trade, in hours:** on the 9 new people the model catches **3** more urgent hours for **30** more false
+  alarms (of 4,088 non-urgent moments); on all 14 people, **22** more for **58** more (of 6,225). On its own the
+  event model ranks well (test AUROC .96-.98), but most of what it catches the rule already catches.
+- **The trend comparator is not usable:** a little more recall for ten times the false alarms (12-13%).
+- **It does not fix the severe misses.** Urgent hours called routine: 7 -> 7 on the 9 new people, 17 -> 17 on all
+  14. Checked row by row: all 7 on the 9 new people (15 of 17 on all 14) are highs that started at 117-167 mg/dL
+  with little trend and then peaked at 258-400, most likely meals eaten after the moment, which no history-only
+  model can see. The other 2 of 17 are lows.
+- Hour-of-day features may be weak: CGMacros timestamps are shifted by the dataset authors.
+- The 5 early-stopping people in the all-14 row are part of the primary held-out 12, whose eval cases were used to
+  explore the trend thresholds; that mainly flatters the trend comparator.
+
+**Status:** not shipped. The evidence is a small, consistent gain that this dataset is too small to confirm. The
+largest remaining error, a spike from a quiet baseline, needs new information (an upcoming-meal prompt or re-triage
+when a meal is logged), not a better model of the past. (Section 9 qualifies this: checking every 5 min, rather than
+every 30, warns of most of these spikes before they cross 250.)
+
+## 9. Five-minute replay: published CGM alerts (alert works; adding it to the rule is not confirmed)
+
+`model/cgmacros/replay.py` replays each person's data reading by reading, as a live CGM system would. The protocol
+was committed (`3eba163`) before any algorithm was run on CGMacros:
+- **Event:** at least 3 readings in a row above 250 or below 70.
+- **Warning:** an alarm while the reading is still in the 70-250 range, at most 60 min before onset. "Timely" means at
+  least 15 min ahead.
+- **False alarm:** an alarm episode (30-min lockout) with no event in the next 60 min. Counted per day of monitored
+  readings.
+- **Random baseline:** each stream is also compared with random alarms at the same per-person rate (20 seeds). A
+  stream that alarms more often warns more by chance.
+
+No algorithm uses parameters fitted to CGMacros.
+
+**Primary 1 (all 45 people, 223 events from 33 people, 439 days): passed.**
+
+| Algorithm | Timely | Random | Warned at all | Median lead | False alarms/day |
+|---|---|---|---|---|---|
+| alert20 (15-min slope projected 20 min) | .677 | .316 | .982 | 20 min | 2.37 |
+| rate2 (\|slope\| >= 2 mg/dL/min) | .587 | .301 | | | 3.33 |
+| GRID (Harvey 2014 tuning) | .426 | .213 | | | 1.91 |
+| GRID, healthy-adult tuning (Hochsmann 2026) | .596 | .441 | | | 5.09 |
+
+- alert20 beats its random baseline by 36 points, 95% CI by person [28, 47].
+- The 20-min median lead is set by design: alert20 projects 20 min ahead.
+- alert20 warns timely on .64 of highs and .83 of lows. GRID detects rises only, so it warns on almost no lows (.02).
+- GRID as a meal detector, against logged meals:
+  - Harvey tuning: 44% sensitivity, 0.6 false positives/day, 30 min to detection.
+  - Healthy-adult tuning: 75%, 1.95/day, 30 min. The published figures are 70%, 0.26/day, 37 min.
+  - Our false positives are higher, probably because of unlogged snacks and because, unlike the paper, there is no
+    night exclusion. The implementation looks right.
+
+**Primary 2 (the 14 people the confirm forecaster never saw): rule + alert20 vs the rule, both checked every 5 min.**
+The rule's level was computed at 98.7% of readings.
+
+| Stream | 14 people: timely (random) | False alarms/day | 9 new people: timely (random) | False alarms/day |
+|---|---|---|---|---|
+| Rule | .395 (.180) | 0.78 | .385 (.150) | 0.82 |
+| **Rule + alert20** | **.741** (.415) | **2.38** | .769 (.304) | 2.05 |
+| alert20 alone | .691 (.344) | 2.14 | .731 (.238) | 1.74 |
+| Event model alone, secondary | .728 (.313) | 0.93 | .731 (.196) | 0.82 |
+
+There are 81 events from 10 people (70 highs, 11 lows) over 138 days. The 9 new people have 26 events from 7 people
+over 89 days.
+
+- **Pre-registered result: not confirmed.**
+  - Criterion (a) passed: the timely share rose by 35 points, 95% CI by person [28, 50].
+  - Criterion (b) failed: false alarms rose by **1.60 a day**, over the limit of 1.0.
+  - On the 9 new people, false alarms rose by 1.23 a day, which also fails.
+  - The alert's parameters were not retuned after seeing this. Any tuned version would be exploratory.
+- **The trade:**
+  - All 14 people: about **28 more events warned in time** for about **221 more false alarms**, roughly 8 per extra
+    warning.
+  - 9 new people: about 10 more for about 109 more.
+- **Checking every 5 min is what helps.**
+  - The rule alone, checked every 5 min, warns timely on .37 of highs.
+  - With alert20 added, that rises to .71.
+  - So many of the spikes §8 called invisible become visible once they start rising, about 15-20 min before they
+    cross 250. That fits Dassau 2008, where meals showed on the CGM about 30 min after eating began.
+  - This does not show that those exact §8 misses are among the newly warned events; that was not checked.
+- **Secondary: the event model checked every 5 min.** This is the §8 model alone, trained on the 31 training people,
+  with its pre-registered threshold, without the rule.
+  - Its timely share is close to rule + alert20 (.728 vs .741), at the rule's false-alarm rate (0.93 vs 0.78 a day).
+  - It has the largest margin over its random baseline: 42 points on all 14 people, vs 33 for rule + alert20.
+  - It is weaker on lows: .545 timely, the same as the rule. It warns at all on only .89 of events.
+  - No criterion was set for it, so it is a candidate for the next pre-registered test, not a finding.
+- **Lows:** 11 events (6 on the 9 new people). That is too few for any claim.
+
+**Status:** not shipped. A 20-min predictive alert gives real early warning on its own, about 2 false alarms a day,
+in line with consumer CGM alerts. Adding it to the rule failed the false-alarm limit set in advance. Next:
+pre-register the 5-min event model, or the rule OR the event model, with the same two criteria.
+
+## 10. Hybrid meal what-if: the no-meal forecast plus a physiological meal curve (passed)
+
+**The problem.** The forecaster learned meals from data alone. Its meal what-ifs were not physiologically
+consistent:
+- A meal forecast dipped below the no-meal forecast in 44% of the windows below.
+- In case-021 a 30 g meal forecast higher than a 60 g meal.
+
+**The idea.** From Apple's Miller, Foti and Fox (2020, arXiv:2008.02852): keep a physiological model's structure and
+let a learned model set its parameters. CGMacros has no insulin data, so only the meal part is used.
+
+`model/cgmacros/hybrid.py` builds each meal forecast as:
+- **The no-meal forecast**, unchanged.
+- **Plus the meal's carbs passed through the Hovorka gut-absorption curve** (time constant 40 min), with a
+  glucose-clearance rate fitted on training people. The fitted rate is 0.02/min.
+- **Scaled by a non-negative gain**, set from the 2 hours of history.
+
+By construction a bigger meal never forecasts lower, and a meal never forecasts below no meal
+(`tests/model_cgmacros/test_hybrid.py`).
+
+**The test.** The protocol was committed (`8139885`) before any held-out output existed:
+- **Windows:** every logged meal, with `as_of` 5 min before it.
+- **Inputs:** both arms get that hour's logged meals, through the decoder triage uses (no oracle activity).
+- **Fitting:** on the 31 confirm-split training people.
+- **Primary:** on the 9 new people, the hybrid is non-inferior to the forecaster at T+60 if the upper 95%
+  person-bootstrap bound of the RMSE difference is below +2.0 mg/dL.
+
+| Meal windows | Forecaster (D) T+60 RMSE | Hybrid | Hybrid, personalized | Hybrid - D, 95% CI | No-meal forecast |
+|---|---|---|---|---|---|
+| **9 new people (pre-registered)**, 327 meals | 39.9 | **35.7** | 33.2 | -4.1 [-8.4, +0.6] | 48.0 |
+| All 14 held-out people (secondary), 485 meals | 41.4 | 36.4 | 35.1 | -4.9 [-8.9, -1.0] | 51.5 |
+
+- **Pre-registered result: passed (non-inferior).** The upper bound, +0.6, is below the +2.0 margin.
+- **Better, not just non-inferior?** On the 9 new people the interval still includes 0. The secondary results lean
+  that way:
+  - Averaged over the hour: hybrid 25.3 vs D 27.4, CI [-3.9, -0.3].
+  - On all 14 people the T+60 interval excludes 0.
+- **Personalized gain (secondary).** This scales the gain by the person's response to earlier meals, using only meals
+  whose hour had ended. It reached 33.2, CI vs D [-11.5, -3.1]. That is the closest analogue of the Apple paper's
+  per-person dynamics, but no criterion was set for it, so it is a candidate, not a finding.
+- **What-if consistency:**
+  - The hybrid's meal forecast fell below no-meal in 0% of windows; D's did in 44% (9 new) and 48% (14).
+  - On a live window for a new person: D forecast 110.9 for a 30 g meal and 110.8 for 60 g at +30 min. The hybrid
+    gave 105.7 and 109.8.
+- **Calibration of the rise over no-meal at +60 (9 new people):**
+  - 50-70 g meals: observed +47, hybrid +45, D +25. D under-predicts large meals by half.
+  - 20-40 g meals: observed +20, hybrid +13, D +16. The hybrid is linear in carbs, so it under-predicts small meals.
+- **Read with care:**
+  - D's T+60 RMSE here (40) is higher than in §1 (28.5). These windows start right at a meal and use the triage
+    decoder, not the oracle activity of §1.
+  - The cross-validation loss over the clearance-rate grid was not smooth: 0.01 scored worse than 0 and 0.02. The
+    fit may have local optima.
+  - The gain was fitted on residuals from people the forecaster trained on.
+  - The p10-p90 band is shifted with the median. Its width is not modelled.
+
+**Verification after the run.** These checks were made after the run, so they are not part of the pre-registration.
+
+Checks that passed:
+- A refit from the cache reproduces k and every RMSE.
+- No test person is in the fitting set.
+- For all 1,553 windows, these were recomputed from the raw grid and matched: the future glucose, the meal carbs (each
+  meal at decoder step 1), and the gain features (from history ending at `as_of`).
+- The meal and no-meal arms differ in 98% of windows.
+- On all 327 held-out windows, forecasts never decrease as carbs go from 0 to 120 g.
+- The hybrid beats D for 8 of the 9 new people. The exception is cgmacros-009: 45.8 vs 36.1.
+
+What the comparison is worth: T+60 RMSE on the 9 new people for simpler baselines.
+
+| Method | T+60 RMSE |
+|---|---|
+| Persistence | 49.0 |
+| No-meal forecast | 48.0 |
+| D (forecaster with the meal) | 39.9 |
+| No-meal + the training people's average post-meal residual (ignores meal size) | 38.3 |
+| No-meal + a straight-line rise per gram | 37.5 |
+| No-meal + Hovorka curve, one constant gain | 37.5 |
+| **Hybrid (Hovorka curve, learned gain)** | **35.7** |
+
+So:
+- **D is a weak bar on these windows.** Adding the average post-meal rise to the no-meal forecast, ignoring the meal
+  size, already beats it.
+- **At T+60 the Hovorka shape adds no accuracy over a straight line.** Both predict about +26 mg/dL on average at 60
+  min; the shape only differs before then.
+- **The learned gain adds about 1.8 mg/dL.**
+
+The case for the hybrid is therefore its consistency (bigger meals always forecast higher, and it is built on a
+published absorption curve), plus a modest accuracy gain from the gain model. It is not that the physiology beats data
+at 60 min. That matches the Apple paper, where the physiological structure paid off mainly at 2-6 h.
+
+**Status:** available, not the default. `python -m model.cgmacros.cases --meal-model hybrid` builds packets whose meal
+what-ifs come from the hybrid (`scenarios.HybridMeal`). The default stays the forecaster, because the level-setter
+(§6) takes the meal scenarios as features (`agents/triage/features.py`). Switching would change triage levels and
+needs the level-setter retrained and re-tested. Triage levels from the rule (no-meal and history-only forecasts) are
+unaffected either way.
+
+## 11. Better forecasts: boosted trees with personal history + Chronos-2 (confirmed on 9 locked people)
+
+**How the model was found.** By trial and error in `model/cgmacros/lab.py`, under a protocol fixed before the first
+trial:
+- **Dev set:** the primary held-out 12 people.
+- **Target:** forecasts made with no future-meal information, which is what triage uses.
+- **Bar:** the TFT A forecaster.
+- **Log:** every trial is in `model/results/lab_log.jsonl`. There were 14 trials, covering the five families in
+  TRIAGE_LITERATURE.md §8.
+
+**Dev results** (T+60 RMSE; TFT A scored 27.7):
+
+| Trial | T+60 |
+|---|---|
+| Boosted trees, 2-h features | 25.7 |
+| + 24-h context | 23.9 |
+| + personal history | 24.3 |
+| + both (`hgb_long_person`) | 23.6 |
+| + retrieval of similar past windows | 23.6 (no gain) |
+| Chronos-2, zero-shot | 26.0 |
+| Fixed 70/30 blend of `hgb_long_person` and Chronos-2 | 23.3 |
+
+Leak checks passed: recomputing every new feature with all later data deleted (or the outcomes replaced with garbage)
+left it unchanged.
+
+**Locked test** (`model/cgmacros/lab_confirm.py`, pre-registered in `7a9e36f`):
+- **Primary model:** the blend, refit on the 31 confirm-training people.
+- **Test set:** the 9 confirm-test people, 25,030 windows. This is their fifth confirmatory use.
+- **Criterion:** a T+60 gain over the confirm TFT A whose 95% person-bootstrap interval stays above 0.
+
+| 9 locked people | T+30 | T+60 | Gain vs A, 95% CI | Rising windows T+60 | Meal next hour T+60 | 80% coverage | Better than A |
+|---|---|---|---|---|---|---|---|
+| TFT A (current) | 18.5 | 26.96 | — | 41.6 | 35.7 | — | — |
+| **Blend (pre-registered)** | **15.7** | **22.46** | **+4.5 [3.3, 5.6]** | **35.8** | 31.3 | 0.773 | **9 of 9** |
+| `hgb_long_person` alone | 15.8 | 22.89 | +4.1 [2.4, 5.4] | 36.2 | 30.8 | 0.859 | 8 of 9 |
+| Chronos-2 alone (zero-shot) | 17.7 | 25.47 | +1.5 [0.9, 2.0] | 40.8 | 34.8 | 0.801 | 8 of 9 |
+
+- **Pre-registered result: confirmed.**
+  - T+60 RMSE fell from 26.96 to 22.46 (-17%), and the interval excludes 0.
+  - The band covered 77.3% of outcomes, inside the pre-set 0.75-0.85.
+  - The blend beat A for every one of the 9 people.
+  - The locked gain (+4.5) matched dev rather than shrinking.
+  - For context: §1's TFT D, which is *told* the future meals, scored 23.07.
+- **Where the gain comes from:** context the TFT never saw. Its 2-h window is normalized per window, so it lacks the
+  last 24 h of glucose, the person's usual level, and how they responded to earlier meals. Chronos-2 adds calibrated
+  bands and a little accuracy.
+- **Rising windows** (the spikes behind most urgent misses) improved from 41.6 to 35.8. That is real but still large:
+  a spike from a flat start remains hard without knowing about the meal.
+- **Not tested: triage levels.**
+  - The rule's thresholds and the level-setter were built on TFT outputs.
+  - Swapping in this forecaster changes urgent and monitor calls. That needs its own pre-registered test (urgent
+    recall and false alarms) before deployment.
+  - The 9 people have now been used five times, so that test needs new people or a new dataset.
+- **Operational cost:**
+  - Chronos-2 runs in its own environment (`.venv-chronos`, `chronos-forecasting==2.0.1`, revision pinned in
+    `chronos_run.py`).
+  - It took about 17 minutes on CPU for 25k windows, about 40 ms per forecast.
+  - `hgb_long_person` alone keeps most of the gain (+4.1) with no extra dependency, but its band is too wide (0.86).
+
+## 12. Reliability: the accurate model warned less at the extremes; a safety floor fixes that (confirmed)
+
+`model/cgmacros/reliability.py` audited the §11 blend. It checked:
+- the Clarke error grid;
+- error by the glucose level that occurred;
+- whether the median and band reach actual lows (< 70) and highs (> 250);
+- cold start;
+- each person.
+
+**Finding:** the blend's average gain came partly from predicting closer to the person's usual level, which is the
+wrong direction for a warning system.
+- On dev, the median reached 3% of actual lows (TFT A: 31%) and the p10 reached 43% (A: 69%).
+- On the locked 9, the median reached 12% of actual highs (A: 21%).
+- Clarke A+B was fine (99.3% dev, 99.5% locked, vs A's 99.1% and 99.2%).
+- Day 1 of a person's data is the weakest (dev 27.2), but still better than A.
+
+**Fix, chosen on dev** (9 more trials, 23 in all; `rel_*` in `lab_log.jsonl`):
+- *Learning the band directly* (quantile trees) made the tails worse.
+- *Up-weighting extreme training labels* helped highs but not lows.
+- *Kept: a safety floor.* Where TFT A's median is outside 70-250 and the blend's is not, use A's median. The band is
+  the union of both bands. Nothing is refit, and the forecaster never warns less than the current one.
+
+**Locked test** (pre-registered in `7eb9df9`, the 9 people's sixth use):
+
+| 9 locked people, T+60 | TFT A (current) | Blend (§11) | **Blend + floor** |
+|---|---|---|---|
+| RMSE | 26.96 | 22.46 | **22.87** (gain +4.1 [3.0, 5.1]) |
+| Rising windows RMSE | 41.6 | 35.8 | 36.2 |
+| Actual highs reached by median / p90 | 21% / 57% | 12% / 52% | **22% / 62%** |
+| Actual lows reached by median / p10 | 81% / 97% | 80% / 96% | **84% / 97%** |
+| p90 > 250 when the actual stayed <= 250 | 3.9% | — | 4.2% |
+| 80% band coverage | 0.79 | 0.77 | 0.89 (conservative) |
+| People better than A | — | 9 of 9 | 9 of 9 |
+
+- **Confirmed.** Both criteria passed:
+  - The RMSE gain interval excludes 0.
+  - Monitor false alarms rose 0.3 points, within the 1-point limit.
+- **The cost:** the floor gives back 0.4 of the RMSE gain, and the band is wider than it needs to be.
+
+**Still weak: big spikes.**
+- When glucose actually went above 250, every model predicted far too low (bias -70 for the floored model).
+- The median reached only 22% of those highs.
+- These are mostly meals the forecaster cannot see. Better history models cannot fix that; knowing about the meal
+  (a logged or prompted meal, §10) or checking every 5 min (§9) can.
+
+**Status:**
+- **Reliable as a forecaster:** more accurate for every locked person, and never less alarming than the current one at
+  the extremes.
+- **Still untested for triage levels:** that needs new people.
+
+## 13. Spikes: what meal information can and cannot do (dev only, exploratory)
+
+**Question.** Can the forecaster catch more spikes (actual > 250 within the hour)?
+
+**Headroom check first.** Training people, windows that cross 250 by T+60 from <= 250 now:
+
+| Situation | Share |
+|---|---|
+| Meal logged in the next hour (a prompt could help) | 26% |
+| Meal already logged in the 60 min before `as_of` (the model already had it) | 48% |
+| Neither | 28% |
+
+Dev: 20% / 33% / 46%. §8's "unlogged meals after the moment" was therefore only part of the story: many spikes follow
+a meal the model knew about.
+
+**Trials** (protocol written before the first trial; dev 12 only, blend + safety floor in every arm):
+
+| Dev, T+60 | Highs reached by median | by p90 | RMSE, meal next hour | RMSE |
+|---|---|---|---|---|
+| Blend + floor (§12) | 46.4% | 78.2% | 31.0 | 23.66 |
+| + Hovorka curve for meals already eaten | 48.1% | 78.6% | 31.0 | 23.68 |
+| + meal prompt answered every time (upper bound) | 49.8% | 81.4% | **26.2** | 22.60 |
+| + prompt answered half the time | 47.6% | 79.5% | 29.4 | 23.29 |
+
+The meal features are monotone, so more carbs never forecasts lower.
+
+**Result: a negative result.**
+- **What meal information does:** it sharpens the forecast around meals. With a perfectly answered prompt, the error in
+  the meal hour falls from 31.0 to 26.2.
+- **What it doesn't do:** catch many more spikes. Highs reached by the median rose at most 3.4 points.
+- **Why:** a 60-min forecast made before a spike begins cannot see how high it will go.
+- **What works instead:** checking every 5 min. §9's trend alarm warned of about 70% of highs at least 15 min ahead.
+- **Recommendation:** run the forecaster and the alarm every 5 min, rather than adding meal prompts for accuracy.
+
+## 14. External test on 73 new people: more accurate forecasts, but they must not replace the triage forecaster
+
+**Data** (people from two other studies, never used for any choice), read through `sources/external_cgm.py` into the
+same 5-min grid:
+- **BIG IDEAs** (PhysioNet, doi:10.13026/aw6y-fc44, ODC-By): 16 adults, Dexcom G6, food logs.
+- **Hall et al. 2018** (doi:10.1371/journal.pbio.2005143, CC BY): 57 adults including type 2 diabetes, Dexcom G4.
+
+**Gaps and fixes:**
+- Heart rate and METs are resting defaults; Hall has no meals.
+- One adapter fix was needed: BIG IDEAs logs one row per food *item*, so items with the same start time are summed into
+  one meal. Without that, normalization quarantined 3,701 rows.
+
+**Test design.** The protocol (`model/cgmacros/external.py`) was committed in `bd4bcde` before any forecast was made.
+- **Models:** frozen.
+- **Moments:** 18,294, at 30-min steps.
+- **Urgent events:** 819 urgent moments from 48 people, almost all lows. Highs cannot be tested here: there were 3
+  events in all.
+- **Arms:**
+  - Current: rule(TFT D no-meal, TFT A).
+  - New: rule(new forecaster, TFT A).
+
+| 73 people | Urgent recall | Predictive recall (in range now) | Urgent false alarms | T+60 RMSE |
+|---|---|---|---|---|
+| Current rule (D + A) | .615 | .234 | 2.28% | D 19.27 / A 19.23 |
+| **New rule (new + A), pre-registered** | .585 (-3.0 [-4.2, -1.6]) | .173 | 1.79% | **new 17.53** (gain vs A +1.7 [1.3, 2.1]) |
+| *All three slots (exploratory, after the result)* | *.618* | *.238* | *2.29%* | — |
+
+- **Pre-registered result: passed on paper, but not a win.**
+  - Both criteria passed: recall was non-inferior at the -5-point margin, and false alarms did not rise.
+  - Recall nonetheless fell by 3 points, with the interval entirely below 0.
+  - On lows still ahead (the moment is in range now), recall fell from 23.4% to 17.3%.
+  - The new rule traded sensitivity for fewer false alarms. For a warning system, that is the wrong trade.
+- **Why** (exploratory, by slot): the new forecaster's median almost never goes below 70. On its own it catches 3.6%
+  of upcoming lows, against 21.2% for D and 16.1% for A. This is the §12 shrinkage again. Replacing D removed D's
+  catches, and the A slot kept only some of them.
+- **Accuracy holds up externally.**
+  - T+60 RMSE is 17.5 vs 19.2 overall.
+  - The gain held in both datasets: BIG IDEAs +2.6 [2.3, 3.0], Hall +1.2 [0.8, 1.7].
+  - It held for new users with no personal history.
+- **Decision:**
+  - Use the new forecaster for the forecasts people see. It is more accurate, including on new datasets.
+  - Do not let it replace D or A in the urgent decision.
+  - If it is added to the rule, add it as a third slot, which by construction can only add urgent calls. Exploratory
+    numbers above: recall .618, false alarms unchanged, monitor calls +0.6 points. That variant has not been
+    pre-registered.
+
+## 15. A 5-minute monitoring loop, tested on the 73 external people
+
+`model/cgmacros/monitor.py`:
+- **How it works:** feed one reading at a time and it returns an alarm with its reasons. A 30-min lockout and a reset
+  after gaps are the same as in every replay test.
+- **Parity check:** it reproduces the offline scorer's alarm episodes exactly (272 of 272 on 12 people, 0
+  differences).
+- **Unit tests:** `tests/model_cgmacros/test_monitor.py`.
+
+**Which alarm should it use?** Pre-registered in `7994f4e`, the 73 people's second use, lows only. The event model
+(§8), checked every 5 min, was compared with alert20 (§9) using `replay.py`'s scoring unchanged:
+
+| 73 external people, 308 events (305 lows) from 51 people | Timely (>= 15 min) | Its random baseline | Median lead | False alarms/day |
+|---|---|---|---|---|
+| Event model | .188 | .121 | 10 min | 0.63 |
+| **alert20** | **.724** | .381 | **25 min** | 3.18 |
+| Event model, daytime only | .172 | .123 | 10 min | 0.63 |
+| alert20, daytime only | .762 | .418 | 25 min | 3.44 |
+
+- **Pre-registered result: not confirmed.**
+  - The event model has fewer false alarms: 2.6/day fewer, CI [2.2, 2.9].
+  - But its timely share is far below non-inferior: -54 points, CI [-59, -48].
+  - It was trained on CGMacros, where urgent moments are mostly highs, and it does not carry over to lows. On CGMacros
+    lows it was also the weakest (§9).
+- **alert20 carries over:**
+  - Timely .724 vs its random .381, in both datasets (BIG IDEAs .79, Hall .72) and with nights excluded (.76).
+  - On CGMacros it was .677 (§9, all 45 people).
+  - The cost is about 3 false alarms a day. That is the standing trade-off: §9's attempt to lower it by combining with
+    the rule failed its false-alarm limit.
+- **Decision:** the loop's default policy is alert20. The event model is an opt-in second policy, and it is not trusted
+  for lows.
+
+## 16. Highs on new people: the trend alarm in type 2 diabetes without insulin (ShanghaiT2DM, 15-min CGM)
+
+**Data.** ShanghaiT2DM (Zhao et al., Sci Data 2023, doi:10.1038/s41597-023-01940-7, CC BY 4.0).
+- Downloaded through the browser, because figshare refuses scripted downloads. The zip MD5 matched figshare's.
+- Kept: recordings with no insulin anywhere (medication summary and every insulin column of the recording). That is 44
+  recordings from 42 people, 548 days.
+- Readings come every 15 min and are used as they are; nothing is interpolated. Values beyond the sensor's limits
+  (39.6 mg/dL floor) are clipped to 40/400.
+
+**Test design.** Pre-registered in `d24a972` (`model/cgmacros/shanghai.py`), the first and only use of these people.
+- **Scoring:** `replay.py`'s scoring with the same clock durations at 15-min spacing. An event is >= 2 readings
+  (>= 15 min) beyond 250 or 70; the warning window is 60 min; the lockout is 30 min; "timely" means >= 15 min ahead.
+- **Alarm:** alert20 uses the last two readings' slope, projected 20 min ahead.
+- **Event count:** 97 highs (the docstring's 81 counted 3-reading runs, not the pre-registered 2) and 235 lows.
+
+| 42 people, 548 days | Events (people) | Timely (>= 15 min) | Its random baseline | Warned >= 30 min ahead | False alarms/day |
+|---|---|---|---|---|---|
+| **Highs** | 97 (20) | **.969** | .098 | .40 | 1.13 (all alarms) |
+| Lows | 235 (30) | .847 | .175 | .45 | |
+| Lows, excluding 2 people stuck at the sensor floor | 190 (28) | .826 | .139 | | |
+
+- **Pre-registered result: confirmed.** On highs, timely beat the random baseline by 87 points, CI [85, 92].
+- **This is the first external evidence on highs.** In type 2 diabetes without insulin, highs build slowly (meals). One
+  15-min step before crossing 250, a rising trend projected 20 min ahead almost always crosses, so the alarm nearly
+  always fires before the high.
+- **Read with care:**
+  - **Short leads:** at 15-min spacing the smallest possible lead is 15 min, and the median was exactly that. Only 40%
+    of highs were warned >= 30 min ahead.
+  - **Not comparable to the 5-min results:** "timely" at 15-min spacing means "warned at the previous reading", so these
+    numbers cannot be compared directly with CGMacros (.636 on highs at 5-min spacing).
+  - **False alarms** were lower (1.1/day), partly because there are a third as many readings to alarm on.
+  - **Not tested here:** the forecasters and the triage rule, which are trained on 5-min data.
+- **Combined with §9 and §15:** the trend alarm is the one warning method that has now held up on CGMacros (5 min) and
+  on three external datasets: lows in BIG IDEAs and Hall, and highs and lows in ShanghaiT2DM.
+
 ## Limits
 
 - Population: adults without insulin therapy; nothing here transfers to type 1 diabetes.

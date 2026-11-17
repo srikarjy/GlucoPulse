@@ -1,0 +1,91 @@
+{
+ "preregistration": "(written 2026-11-16 after the reliability audit, model/results/cgmacros_reliability_*.json,\nshowed the blend reaches fewer actual lows/highs than TFT A; chosen on dev from 9 more trials, 23 in all; run with\n--score-floor; the 9 people's sixth use):\n  Model       \"blend_floor\": the blend above; where TFT A's median is outside 70-250 and the blend's is not, use A's\n              median; band = union of the blend band and A's band (lo = min, hi = max). Nothing is refit.\n  Criteria    (1) T+60 RMSE gain over A, 95% person-bootstrap lower bound > 0;\n              (2) monitor false alarms: share of windows with p90 > 250 whose actual T+60 stayed <= 250 at most\n                  1.0 point above A's.\n  By design   actual lows/highs reached by the median and by p10/p90 are >= A's (reported, not criteria).\n  Secondary   the extremes table, coverage (expected above 0.85: the union band is conservative), per-person wins.",
+ "windows": 25030,
+ "blend_floor": {
+  "all": {
+   "n": 25030,
+   "t30": 15.84,
+   "t60": 22.87,
+   "A_t60": 26.96
+  },
+  "meal_next_hour": {
+   "n": 3706,
+   "t30": 15.27,
+   "t60": 31.77,
+   "A_t60": 35.73
+  },
+  "rising": {
+   "n": 1248,
+   "t30": 28.37,
+   "t60": 36.18,
+   "A_t60": 41.61
+  },
+  "t60_gain_vs_A": 4.09,
+  "t60_gain_vs_A_ci95": [
+   2.95,
+   5.06
+  ],
+  "coverage80_t60": 0.885,
+  "extremes": {
+   "highs_n": 242,
+   "lows_n": 114,
+   "highs_by_median": 0.223,
+   "lows_by_median": 0.842,
+   "A_highs_by_median": 0.211,
+   "A_lows_by_median": 0.807,
+   "A_highs_by_p90": 0.57,
+   "A_lows_by_p10": 0.974,
+   "bias_above_250": -69.8,
+   "A_bias_above_250": -76.7,
+   "highs_by_p90": 0.62,
+   "lows_by_p10": 0.974,
+   "band_width_t60": 68.7,
+   "A_band_width_t60": 58.4,
+   "p90_over_250_when_not_high": 0.0416,
+   "A_p90_over_250_when_not_high": 0.0388,
+   "coverage_rising": 0.884
+  }
+ },
+ "per_person_t60_vs_A": {
+  "cgmacros-003": [
+   20.8,
+   27.2
+  ],
+  "cgmacros-008": [
+   22.9,
+   28.7
+  ],
+  "cgmacros-009": [
+   23.2,
+   24.1
+  ],
+  "cgmacros-014": [
+   21.8,
+   26.7
+  ],
+  "cgmacros-016": [
+   15.9,
+   18.8
+  ],
+  "cgmacros-017": [
+   14.6,
+   17.2
+  ],
+  "cgmacros-038": [
+   24.5,
+   29.0
+  ],
+  "cgmacros-043": [
+   19.2,
+   22.1
+  ],
+  "cgmacros-045": [
+   36.5,
+   41.8
+  ]
+ },
+ "people_better_than_A": 9,
+ "criterion_1_t60_gain_ci_lower_above_0": true,
+ "criterion_2_monitor_false_alarms_at_most_1pt_above_A": true,
+ "confirmed": true
+}
