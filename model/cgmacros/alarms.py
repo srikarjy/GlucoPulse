@@ -109,6 +109,76 @@ def run_trial(name: str, note: str = "") -> dict:
     return res
 
 
+# ================================================================ PERSONAL + TIERS PROTOCOL (2026-11-16, before any trial)
+# 1. Per-person thresholds: each person's first 2 days are a calibration period (no alarms scored, for every arm);
+#    from them the person's own |15-min slope| distribution is taken, and afterwards a trend alarm only fires if the
+#    current |slope| is also at or above the person's q-th percentile (jittery sensors / people need a steeper trend).
+#    Arms are scored on the SAME post-calibration frames, including alert20 itself (so the comparison is fair).
+# 2. Two tiers: "heads-up" = alert20 (or its personal version) and "alarm" = a strict rule (gate + 2 readings in a row);
+#    reported per tier: the strict tier's false alarms/day and timely share, and the heads-up tier's.
+# Dev = all 45 CGMacros people; trials tagged pers_/tier_ in alarm_log.jsonl; at most 10. Target unchanged (<= 1.0
+# false alarms/day at >= .60 timely), judged on the single alarm for (1) and on the strict tier for (2).
+CAL_DAYS = 2.0
+
+
+def personal_frames(grid, people, cal_days=CAL_DAYS):
+    """Post-calibration frames per person and each person's calibration |slope15| sample (readings before day 2)."""
+    import pandas as pd
+    cal, out = {}, []
+    for p in people:
+        g = grid[grid.participant == p]
+        cut = g["ts"].min() + pd.Timedelta(days=cal_days)
+        slopes = []
+        for _, f in R.segments(g[g.ts < cut], [p]):
+            x = f["glucose"].to_numpy(float)
+            if len(x) >= 4:
+                slopes.append(np.abs(R.slope15(x)[3:]))
+        cal[p] = np.concatenate(slopes) if slopes else np.array([])
+        out += list(R.segments(g[g.ts >= cut], [p]))
+    return out, cal
+
+
+def make_personal(q, cal, base=None):
+    base = base or make()
+
+    def stream(p, f):
+        x = f["glucose"].to_numpy(float)
+        a = base(x)
+        sample = cal.get(p, np.array([]))
+        if len(sample) < 50:                       # too little calibration data: fall back to the plain alarm
+            return a
+        return a & (np.abs(R.slope15(x)) >= np.percentile(sample, q))
+    return stream
+
+
+def run_personal(names: list[str], note: str = "") -> list[dict]:
+    grid = build_grid()
+    people = sorted(grid.participant.unique())
+    frames, cal = personal_frames(grid, people)
+    strict = make(confirm=2, hi_gate=200, lo_gate=100)
+    streams = {"pers_alert20_postcal": lambda p, f: make()(f["glucose"].to_numpy(float)),
+               "pers_q50": make_personal(50, cal), "pers_q75": make_personal(75, cal),
+               "pers_q90": make_personal(90, cal),
+               "pers_q75_gate": make_personal(75, cal, make(hi_gate=200, lo_gate=100)),
+               "tier_strict_postcal": lambda p, f: strict(f["glucose"].to_numpy(float)),
+               "tier_strict_personal_q75": make_personal(75, cal, strict)}
+    rows = []
+    for n in names:
+        res = {"trial": n, "when": datetime.now(timezone.utc).isoformat(timespec="seconds"), "note": note}
+        try:
+            per = R.run(frames, {n: streams[n]})[n]
+            s = R.summarize(per, sorted(per))
+            res.update({"timely": s["timely_share"], "random_timely": s["random_timely_share"],
+                        "false_alarms_per_day": s["false_alarms_per_day"], "median_lead": s["median_lead_min_if_warned"],
+                        "high": s["high"], "low": s["low"], "events": s["events"], "days": s["days"]})
+        except Exception as e:
+            res["error"] = f"{type(e).__name__}: {e}"
+        with open(LOG, "a") as fh:
+            fh.write(json.dumps(res) + "\n")
+        rows.append(res)
+    return rows
+
+
 def _compare(frames, a_fn, b_fn, people=None) -> dict:
     per = R.run(frames, {"alert20": lambda p, f: a_fn(f["glucose"].to_numpy(float)),
                          "gate": lambda p, f: b_fn(f["glucose"].to_numpy(float))})
@@ -155,7 +225,12 @@ def main() -> int:
     ap.add_argument("--note", default="")
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--test", action="store_true")
+    ap.add_argument("--personal", nargs="*", default=[])
     a = ap.parse_args()
+    for r in run_personal(a.personal, a.note) if a.personal else []:
+        print(r["trial"], "ERROR " + r["error"] if "error" in r else
+              f"timely {r['timely']} (random {r['random_timely']}) FA/day {r['false_alarms_per_day']} "
+              f"lead {r['median_lead']} high {r['high']} low {r['low']} days {r['days']}")
     if a.test:
         r = test()
         print(json.dumps({k: v for k, v in r.items() if k != "preregistration"}, indent=1, default=str))
