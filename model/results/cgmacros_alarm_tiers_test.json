@@ -1,0 +1,100 @@
+{
+ "preregistration": "see model/cgmacros/alarms.py, PRE-REGISTERED TIERS TEST",
+ "external_73": {
+  "heads_up": {
+   "events": 308,
+   "people_with_events": 51,
+   "days": 494.1,
+   "timely_share": 0.724,
+   "random_timely_share": 0.39,
+   "warned_at_all": 0.945,
+   "median_lead_min_if_warned": 25.0,
+   "false_alarms_per_day": 3.18,
+   "random_false_alarms_per_day": 7.26,
+   "high": {
+    "n": 3,
+    "timely": 1.0
+   },
+   "low": {
+    "n": 305,
+    "timely": 0.721
+   },
+   "after_false_alarm": {
+    "false_alarms": 1572,
+    "near_high_220_250": 0.013,
+    "near_low_70_85": 0.785,
+    "large_move": 0.032,
+    "nothing_much": 0.17
+   }
+  },
+  "loud": {
+   "events": 308,
+   "people_with_events": 51,
+   "days": 494.1,
+   "timely_share": 0.526,
+   "random_timely_share": 0.264,
+   "warned_at_all": 0.776,
+   "median_lead_min_if_warned": 20.0,
+   "false_alarms_per_day": 2.13,
+   "random_false_alarms_per_day": 4.37,
+   "high": {
+    "n": 3,
+    "timely": 0.333
+   },
+   "low": {
+    "n": 305,
+    "timely": 0.528
+   },
+   "after_false_alarm": {
+    "false_alarms": 1050,
+    "near_high_220_250": 0.016,
+    "near_low_70_85": 0.836,
+    "large_move": 0.033,
+    "nothing_much": 0.114
+   }
+  }
+ },
+ "criterion_loud_fa_at_most_1.5": false,
+ "criterion_loud_timely_at_least_0.40": true,
+ "confirmed": false,
+ "shanghai_15min": {
+  "heads_up": {
+   "events": 332,
+   "people_with_events": 37,
+   "days": 547.6,
+   "timely_share": 0.883,
+   "random_timely_share": 0.159,
+   "warned_at_all": 0.883,
+   "median_lead_min_if_warned": 15.0,
+   "false_alarms_per_day": 1.13,
+   "random_false_alarms_per_day": 2.09,
+   "high": {
+    "n": 97,
+    "timely": 0.969
+   },
+   "low": {
+    "n": 235,
+    "timely": 0.847
+   }
+  },
+  "loud_gate_only": {
+   "events": 332,
+   "people_with_events": 37,
+   "days": 547.6,
+   "timely_share": 0.883,
+   "random_timely_share": 0.16,
+   "warned_at_all": 0.883,
+   "median_lead_min_if_warned": 15.0,
+   "false_alarms_per_day": 1.1,
+   "random_false_alarms_per_day": 1.99,
+   "high": {
+    "n": 97,
+    "timely": 0.969
+   },
+   "low": {
+    "n": 235,
+    "timely": 0.847
+   }
+  }
+ }
+}

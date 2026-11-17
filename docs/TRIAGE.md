@@ -735,6 +735,52 @@ same 5-min grid:
   - two alert tiers (a quiet "heads-up" and a loud alarm);
   - pairing the alarm with the triage forecast. Note that §9's version of that pairing failed its false-alarm limit.
 
+## 18. Per-person thresholds and two alert tiers
+
+Both were run under a protocol committed before any trial, on CGMacros dev (`pers_*`, `tier_*` in `alarm_log.jsonl`;
+7 trials). Scoring was on post-calibration days for every arm.
+
+**Per-person thresholds: dropped on dev.**
+- How they worked: the alarm fires only if the current trend is at least as steep as the person's own 75th percentile
+  from their first 2 days.
+- They did not beat the trade-off: .599 timely at 1.98/day, against the gate's .637 at 1.88. Nothing to test.
+
+**What a "false" alarm really is** (descriptive, CGMacros). After alert20's false alarms:
+
+| What followed | Share |
+|---|---|
+| Near-high (220-250) | 25% |
+| Near-low (70-85) | 30% |
+| A large move | 14% |
+| Nothing much | 31% |
+
+For the strict tier, "nothing much" was 14%.
+
+**Two tiers, locked test** (pre-registered in `38a7c49`; the 73 external people's fourth use):
+- **Heads-up** = alert20.
+- **Loud** = gate + 2 readings in a row.
+
+| 73 external people | Timely | Random | False alarms/day | After a false alarm: near-low / nothing much |
+|---|---|---|---|---|
+| Heads-up (alert20) | .724 | .390 | 3.18 | 79% / 17% |
+| **Loud** | .526 | .264 | 2.13 | 84% / 11% |
+
+- **Pre-registered result: not confirmed.**
+  - The loud tier's timely share passed (.526 >= .40).
+  - Its false alarms did not: 2.13/day against the 1.5 limit.
+  - The limit was set from CGMacros dev, where the loud tier ran at 1.19/day.
+- **Why: these "false" alarms are mostly near-lows.**
+  - In these mostly normoglycemic people, glucose often dips to 70-85 without three readings below 70.
+  - 84% of the loud tier's false alarms were followed by such a dip.
+  - Only 11% (about 0.24/day) were followed by nothing much.
+- **ShanghaiT2DM** (15 min, loud = gate only): no change, 1.10/day and timely .883.
+- **Product implication:**
+  - Count only alarms followed by nothing much: about 0.5/day for heads-up and 0.24/day for loud on the external
+    people.
+  - Wording should say "glucose is heading toward low", not "low glucose".
+  - The strict event definition (3 readings below 70) labels a correct heads-up about a near-low as false. That is a
+    choice of definition, not a model error.
+
 ## Limits
 
 - Population: adults without insulin therapy; nothing here transfers to type 1 diabetes.
