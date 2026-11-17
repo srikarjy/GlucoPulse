@@ -695,6 +695,46 @@ same 5-min grid:
 - **Combined with §9 and §15:** the trend alarm is the one warning method that has now held up on CGMacros (5 min) and
   on three external datasets: lows in BIG IDEAs and Hall, and highs and lows in ShanghaiT2DM.
 
+## 17. Fewer false alarms: simple rules barely move the trade-off
+
+`model/cgmacros/alarms.py`:
+- **Protocol:** committed before the first trial.
+- **Dev set:** all 45 CGMacros people. The rules have no fitted parameters, so nobody needs to be held out.
+- **Log:** 11 trials, including one crash (a bug on very short segments, fixed and rerun), in
+  `model/results/alarm_log.jsonl`.
+- **Target:** <= 1 false alarm a day while staying >= 60% timely.
+
+| CGMacros, 45 people | Timely | False alarms/day |
+|---|---|---|
+| alert20 (current) | .677 | 2.37 |
+| **gate** (high alarm only if glucose >= 200, low only if <= 100) | .637 | 1.88 |
+| 2 readings in a row | .511 | 1.68 |
+| wider margins (+10 / -5 mg/dL) | .561 | 1.66 |
+| 2 in a row + gate | .475 | 1.30 |
+| 2 in a row + gate + margins | .350 | 0.89 |
+| 3 in a row | .269 | 0.96 |
+| 2 in a row, projected 30 min | .628 | 3.24 |
+
+**Dev result: no variant met the target.**
+- Every rule built only from the glucose stream trades timeliness for false alarms at about the same rate.
+- Confirmation over consecutive readings is the costliest, because each extra reading delays the alarm 5 min.
+
+**Locked test of the best trade** (`gate`, pre-registered in `12fa05b`): confirmed, but small.
+
+| | Timely, alert20 -> gate | False alarms/day | Criteria |
+|---|---|---|---|
+| 73 external people (lows) | .724 -> .711 (diff CI [-.033, 0]) | 3.18 -> 3.00 (saved 0.18 [0.14, 0.22]) | both passed |
+| ShanghaiT2DM, 15 min (highs + lows) | .883 -> .883 | 1.13 -> 1.10 | both passed |
+
+- **Why the saving is small:** most of the gate's dev saving was on highs (CGMacros is high-heavy). The low gate (<= 100)
+  rarely binds, because lows almost always start from below 100.
+- **Decision:** the gate is a safe, tiny improvement, about 6-20% fewer false alarms depending on the population. The
+  false-alarm burden stays at about 2-3 a day.
+- **Next ideas:** getting to about 1 a day needs something other than stream rules, for example:
+  - per-person thresholds learned from the person's own first days;
+  - two alert tiers (a quiet "heads-up" and a loud alarm);
+  - pairing the alarm with the triage forecast. Note that §9's version of that pairing failed its false-alarm limit.
+
 ## Limits
 
 - Population: adults without insulin therapy; nothing here transfers to type 1 diabetes.
