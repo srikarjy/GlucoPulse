@@ -1,0 +1,81 @@
+# Using GlucoPulse from ChatGPT and Claude
+
+GlucoPulse exposes a small, read-only **MCP server** (`agents/public_mcp/`) that AI assistants can call:
+
+| Tool | What it does |
+|---|---|
+| `get_glucose_alert(readings, unit, mode)` | Checks recent CGM readings (sent by the caller) for a coming low (< 70) or high (> 250) with the tested two-tier trend alert. Returns none / `heads_up` / `loud`, the direction, a plain-language reason, the 20-min projection, the validated population and a disclaimer. |
+| `about_glucopulse_alerts()` | The tested accuracy and limits, so an assistant quotes real numbers (docs/TRIAGE.md §9, §15-19). |
+
+Nothing is stored, no stored patient data can be read, and no tool changes anything. Forecasts and triage levels from
+the research are **not** exposed (they are not validated for this use).
+
+## 1. Local: Claude Code (no accounts needed)
+
+```bash
+export GLUCOPULSE_MCP_DEV_SECRET=$(python -c "import secrets; print(secrets.token_hex(32))")
+.venv-pa/bin/python -m agents.public_mcp.server            # http://127.0.0.1:8770/mcp, dev tokens, localhost only
+TOKEN=$(.venv-pa/bin/python -m agents.public_mcp.auth --dev-token)    # valid 1 h
+claude mcp add --transport http glucopulse http://127.0.0.1:8770/mcp --header "Authorization: Bearer $TOKEN"
+```
+
+Then ask Claude, for example: *"Here are my last hour of CGM readings (mmol/L) … am I heading low?"*
+
+Dev mode refuses to bind anywhere but localhost.
+
+## 2. Hosted: ChatGPT and claude.ai (needs an identity provider and HTTPS)
+
+Both connect only to **remote HTTPS** MCP servers and sign users in with **OAuth 2.1 + PKCE**. GlucoPulse is the
+*resource server*; an identity provider (IdP) such as Auth0 issues the tokens. As of 2026-11:
+- ChatGPT supports custom MCP servers on Business, Enterprise and Edu workspaces, or through OpenAI's plugin flow.
+- ChatGPT needs the IdP to advertise `S256` PKCE, and either client ID metadata documents or dynamic client
+  registration.
+- Enable `offline_access` so ChatGPT can refresh tokens.
+- claude.ai custom connectors use the same OAuth discovery.
+
+Steps:
+1. **IdP:** create an API whose identifier is your public MCP URL (e.g. `https://mcp.example.org/mcp`).
+   - Add the permission `glucose:alerts`.
+   - Enable dynamic client registration (or client metadata documents) and refresh tokens.
+2. **Host** the server behind HTTPS and set:
+   ```bash
+   GLUCOPULSE_MCP_AUTH_MODE=jwks
+   GLUCOPULSE_MCP_RESOURCE=https://mcp.example.org/mcp
+   GLUCOPULSE_MCP_ISSUER=https://YOUR-TENANT.auth0.com/
+   GLUCOPULSE_MCP_JWKS_URL=https://YOUR-TENANT.auth0.com/.well-known/jwks.json
+   GLUCOPULSE_MCP_HOST=0.0.0.0
+   ```
+3. **Connect:**
+   - ChatGPT: Settings → Apps/Connectors → add a custom MCP server with the URL.
+   - claude.ai: Settings → Connectors → Add custom connector with the URL.
+
+   Both read `/.well-known/oauth-protected-resource/mcp`, send the user to your IdP, and call the tools with the
+   returned token.
+
+## 3. Security and safety controls
+
+| Threat | Control | Test |
+|---|---|---|
+| Unauthenticated use | Every request needs a bearer token; 401 with `WWW-Authenticate` → protected-resource metadata (RFC 9728) | `test_no_token_401_points_to_resource_metadata` |
+| Tokens meant for another service (token passthrough / confused deputy) | Audience must equal this server's resource URL; issuer checked; the internal clinical-agent token is rejected | `test_bad_tokens_rejected`, `test_internal_clinical_agent_token_rejected` |
+| Forged or expired tokens | Signature (JWKS RS256/ES256 in production), `exp`/`iat` required, `alg=none` refused, dev tokens <= 12 h | `test_unsigned_and_wrongly_signed_tokens_rejected` |
+| Over-broad access | Required scope `glucose:alerts`; only two read-only tools; no stored data, no writes | `test_schema_and_read_only_annotations` |
+| DNS rebinding from a browser | Host and Origin allowlists | `test_dns_rebinding_blocked` |
+| Abuse / cost | 256 KB request cap; per-user rate limit (30 calls/min) | `test_oversized_body_rejected`, `test_rate_limit` |
+| Prompt injection through tool output | Inputs are numbers and timestamps only; **error messages never echo input** (SDK validation errors that quote the bad value are replaced with a fixed message) | `test_text_injection_attempt_cannot_reach_output` |
+| Unsafe medical use | Descriptions and every result say: screening only, not for insulin dosing, confirm with a meter; validated population stated; stale data refused unless explicitly `retrospective` (and then labelled not current); units explicit, mmol/L sent as mg/dL caught | `test_alert_on_a_fall_with_disclaimer`, `test_stale_data_refused_unless_retrospective`, `test_mmol_converted_and_mgdl_mistake_caught` |
+| Health data in logs | Audit log is metadata only (tool, outcome, count, hashed user); no glucose values or times | `test_audit_is_metadata_only` |
+| Dev credentials in production | Dev mode only binds to localhost; jwks mode requires an https resource URL | `test_dev_mode_refuses_public_bind` |
+
+All tests: `.venv-pa/bin/python -m pytest tests/agents/test_public_mcp.py` (25 tests, including an end-to-end call
+from a real MCP client over HTTP).
+
+## 4. Not done yet
+
+- **Production auth is untested against a real IdP:** the jwks path has no live test yet.
+- **No real ChatGPT or claude.ai connection yet:** it needs a public HTTPS host.
+- **Before any real-patient use:** a data-protection review (the audit log is metadata only, but readings pass through
+  the assistant provider) and a clinical review of the alert wording.
+- **Rate limits are per process,** in memory. Run one instance, or move the limiter to Redis before scaling out.
+- **CGMacros data must not be sent through this server.** Its CC BY-NC-SA licence has not been checked for third-party
+  LLM use.
