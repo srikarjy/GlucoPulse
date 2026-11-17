@@ -85,6 +85,52 @@ def parse_bigideas(folder: str | Path, patient: str) -> AdapterResult:
     return out
 
 
+INSULIN_WORDS = ("insulin", "glargine", "aspart", "lispro", "detemir", "degludec", "glulisine", "humulin", "novolin",
+                 "protamine")
+
+
+def parse_shanghai_t2dm(root: str | Path) -> dict[str, AdapterResult]:
+    """ShanghaiT2DM (Zhao et al., Sci Data 2023, doi:10.1038/s41597-023-01940-7; figshare 10.6084/m9.figshare.21600933,
+    CC BY 4.0): 100 people with type 2 diabetes, CGM every 15 min. Only recordings with NO insulin are returned: none in
+    the summary's hypoglycemic agents and no value in any insulin column of the recording. One AdapterResult per
+    recording, keyed shanghai-PPP-R (PPP = person pseudonym by sorted person number, R = recording index); the source's
+    patient numbers and dates are not kept. Needs pandas with openpyxl/xlrd."""
+    import pandas as pd
+    root = Path(root)
+    summary = pd.read_excel(root / "Shanghai_T2DM_Summary.xlsx")
+    persons = sorted({str(n).split("_")[0] for n in summary["Patient Number"]})
+    pid = {p: f"{i:03d}" for i, p in enumerate(persons, start=1)}
+    seen: dict[str, int] = {}
+    out = {}
+    for num, agents in zip(summary["Patient Number"], summary["Hypoglycemic Agents"].astype(str)):
+        if any(w in agents.lower() for w in INSULIN_WORDS):
+            continue
+        files = sorted((root / "Shanghai_T2DM").glob(f"{num}.*"))
+        if not files:
+            continue
+        d = pd.read_excel(files[0])
+        icols = [c for c in d.columns if "insulin" in c.lower() and "non-insulin" not in c.lower()]
+        if icols and d[icols].notna().any().any():
+            continue
+        person = pid[str(num).split("_")[0]]
+        seen[person] = seen.get(person, 0) + 1
+        patient = checked_patient(f"shanghai-{person}-{seen[person]}")
+        res = AdapterResult()
+        for k, (ts, v) in enumerate(zip(d["Date"], d["CGM (mg / dl)"]), start=2):
+            if pd.isna(ts) or pd.isna(v):
+                res.stats["skipped_empty_cell"] += 1
+                continue
+            g = float(v)
+            if not 40.0 <= g <= 400.0:                # the sensor's reporting limits (2.2 mmol/L floor = 39.6)
+                res.stats["clipped_to_sensor_limit"] += 1
+                g = min(max(g, 40.0), 400.0)
+            res.raws.append(RawMeasurement(patient=patient, kind=Kind.GLUCOSE_CGM,
+                                           ts=pd.Timestamp(ts).to_pydatetime(), value=g, unit="mg/dL",
+                                           source="shanghai_t2dm", device="cgm-15min", raw_ref=f"{files[0].name}:{k}"))
+        out[patient] = res
+    return out
+
+
 def parse_hall2018(path: str | Path) -> dict[str, AdapterResult]:
     """One AdapterResult per subject, keyed by pseudonym hall-NNN (subjects in sorted order)."""
     path = Path(path)
