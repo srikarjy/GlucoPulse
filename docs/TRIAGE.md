@@ -660,6 +660,41 @@ same 5-min grid:
 - **Decision:** the loop's default policy is alert20. The event model is an opt-in second policy, and it is not trusted
   for lows.
 
+## 16. Highs on new people: the trend alarm in type 2 diabetes without insulin (ShanghaiT2DM, 15-min CGM)
+
+**Data.** ShanghaiT2DM (Zhao et al., Sci Data 2023, doi:10.1038/s41597-023-01940-7, CC BY 4.0).
+- Downloaded through the browser, because figshare refuses scripted downloads. The zip MD5 matched figshare's.
+- Kept: recordings with no insulin anywhere (medication summary and every insulin column of the recording). That is 44
+  recordings from 42 people, 548 days.
+- Readings come every 15 min and are used as they are; nothing is interpolated. Values beyond the sensor's limits
+  (39.6 mg/dL floor) are clipped to 40/400.
+
+**Test design.** Pre-registered in `d24a972` (`model/cgmacros/shanghai.py`), the first and only use of these people.
+- **Scoring:** `replay.py`'s scoring with the same clock durations at 15-min spacing. An event is >= 2 readings
+  (>= 15 min) beyond 250 or 70; the warning window is 60 min; the lockout is 30 min; "timely" means >= 15 min ahead.
+- **Alarm:** alert20 uses the last two readings' slope, projected 20 min ahead.
+- **Event count:** 97 highs (the docstring's 81 counted 3-reading runs, not the pre-registered 2) and 235 lows.
+
+| 42 people, 548 days | Events (people) | Timely (>= 15 min) | Its random baseline | Warned >= 30 min ahead | False alarms/day |
+|---|---|---|---|---|---|
+| **Highs** | 97 (20) | **.969** | .098 | .40 | 1.13 (all alarms) |
+| Lows | 235 (30) | .847 | .175 | .45 | |
+| Lows, excluding 2 people stuck at the sensor floor | 190 (28) | .826 | .139 | | |
+
+- **Pre-registered result: confirmed.** On highs, timely beat the random baseline by 87 points, CI [85, 92].
+- **This is the first external evidence on highs.** In type 2 diabetes without insulin, highs build slowly (meals). One
+  15-min step before crossing 250, a rising trend projected 20 min ahead almost always crosses, so the alarm nearly
+  always fires before the high.
+- **Read with care:**
+  - **Short leads:** at 15-min spacing the smallest possible lead is 15 min, and the median was exactly that. Only 40%
+    of highs were warned >= 30 min ahead.
+  - **Not comparable to the 5-min results:** "timely" at 15-min spacing means "warned at the previous reading", so these
+    numbers cannot be compared directly with CGMacros (.636 on highs at 5-min spacing).
+  - **False alarms** were lower (1.1/day), partly because there are a third as many readings to alarm on.
+  - **Not tested here:** the forecasters and the triage rule, which are trained on 5-min data.
+- **Combined with §9 and §15:** the trend alarm is the one warning method that has now held up on CGMacros (5 min) and
+  on three external datasets: lows in BIG IDEAs and Hall, and highs and lows in ShanghaiT2DM.
+
 ## Limits
 
 - Population: adults without insulin therapy; nothing here transfers to type 1 diabetes.

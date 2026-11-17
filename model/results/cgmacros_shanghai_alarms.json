@@ -1,0 +1,126 @@
+{
+ "preregistration": "(written 2026-11-16; before any alarm was run on these people; only event counts and the sensor-floor\ncounts per person were looked at):\n  People      the recordings with no insulin anywhere (summary agents and every insulin column): 44 recordings,\n              42 people, 548 days; 81 high and 162 low events by the count below. Readings outside 40-400 are clipped\n              to the sensor limits (as for Dexcom Low/High in the other external sets).\n  Spacing     the real 15-min readings; nothing is interpolated. Segments break at any step other than 15 min (+-2).\n              Same clock durations as replay.py, in 15-min readings: event = >= 2 consecutive readings > 250 or < 70\n              (>= 15 min, like 3 readings at 5 min), events of a kind < 30 min apart merge, warning window 60 min\n              (4 readings), alarm lockout 30 min (2 readings), timely = first warning >= 15 min before onset.\n  Alarm       alert20 at 15-min spacing: slope from the last two readings (the 15-min least-squares slope with two\n              points), projected 20 min ahead; alarm if > 250 or < 70. Fixed, not tuned. Threshold (reactive) shown for\n              reference. Scoring, false alarms and the rate-matched random baseline (20 seeds) are replay.py's.\n  Primary     HIGH events: alert20 timely share minus its random baseline's, 95% person-bootstrap interval > 0.\n  Secondary   lows (same test); false alarms per day; median lead; warned at all; excluding the two people with long\n              runs at the sensor floor (shanghai-076, shanghai-078: 120 and 144 floor readings, possibly sensor\n              failure); CGMacros context: alert20 timely on highs .636 at 5-min spacing (section 9).\n  Not tested  forecasters and the triage rule (trained on 5-min data; running them here would need interpolation or a\n              15-min retrain).",
+ "segments": 47,
+ "people": 42,
+ "all": {
+  "alert20_15": {
+   "days": 547.6,
+   "false_alarms_per_day": 1.13,
+   "random_false_alarms_per_day": 2.09,
+   "high": {
+    "events": 97,
+    "people_with_events": 20,
+    "timely": 0.969,
+    "random_timely": 0.098,
+    "warned_at_all": 0.969,
+    "median_lead_min": 15.0,
+    "timely_minus_random_ci95": [
+     0.847,
+     0.918
+    ]
+   },
+   "low": {
+    "events": 235,
+    "people_with_events": 30,
+    "timely": 0.847,
+    "random_timely": 0.175,
+    "warned_at_all": 0.847,
+    "median_lead_min": 30.0,
+    "timely_minus_random_ci95": [
+     0.618,
+     0.74
+    ]
+   }
+  },
+  "threshold": {
+   "days": 547.6,
+   "false_alarms_per_day": 0.0,
+   "random_false_alarms_per_day": 0.0,
+   "high": {
+    "events": 97,
+    "people_with_events": 20,
+    "timely": 0.0,
+    "random_timely": 0.0,
+    "warned_at_all": 0.0,
+    "median_lead_min": null,
+    "timely_minus_random_ci95": [
+     0.0,
+     0.0
+    ]
+   },
+   "low": {
+    "events": 235,
+    "people_with_events": 30,
+    "timely": 0.0,
+    "random_timely": 0.0,
+    "warned_at_all": 0.0,
+    "median_lead_min": null,
+    "timely_minus_random_ci95": [
+     0.0,
+     0.0
+    ]
+   }
+  }
+ },
+ "excluding_floor_people": {
+  "alert20_15": {
+   "days": 527.1,
+   "false_alarms_per_day": 1.15,
+   "random_false_alarms_per_day": 2.07,
+   "high": {
+    "events": 97,
+    "people_with_events": 20,
+    "timely": 0.969,
+    "random_timely": 0.098,
+    "warned_at_all": 0.969,
+    "median_lead_min": 15.0,
+    "timely_minus_random_ci95": [
+     0.847,
+     0.913
+    ]
+   },
+   "low": {
+    "events": 190,
+    "people_with_events": 28,
+    "timely": 0.826,
+    "random_timely": 0.139,
+    "warned_at_all": 0.826,
+    "median_lead_min": 30.0,
+    "timely_minus_random_ci95": [
+     0.637,
+     0.755
+    ]
+   }
+  },
+  "threshold": {
+   "days": 527.1,
+   "false_alarms_per_day": 0.0,
+   "random_false_alarms_per_day": 0.0,
+   "high": {
+    "events": 97,
+    "people_with_events": 20,
+    "timely": 0.0,
+    "random_timely": 0.0,
+    "warned_at_all": 0.0,
+    "median_lead_min": null,
+    "timely_minus_random_ci95": [
+     0.0,
+     0.0
+    ]
+   },
+   "low": {
+    "events": 190,
+    "people_with_events": 28,
+    "timely": 0.0,
+    "random_timely": 0.0,
+    "warned_at_all": 0.0,
+    "median_lead_min": null,
+    "timely_minus_random_ci95": [
+     0.0,
+     0.0
+    ]
+   }
+  }
+ },
+ "primary_high_timely_beats_random": true
+}
