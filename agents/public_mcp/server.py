@@ -42,6 +42,26 @@ class SafeFastMCP(FastMCP):
 READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotentHint=True, openWorldHint=False)
 
 
+INSTRUCTIONS = ("GlucoPulse checks CGM glucose readings for a coming low or high. Results are screening information "
+                "only: never use them for insulin dosing; tell the person to confirm with a meter and follow their care "
+                "plan. Quote accuracy only from about_glucopulse_alerts.")
+
+
+def _add_tools(mcp: FastMCP) -> FastMCP:
+    mcp.add_tool(tools.get_glucose_alert, title="Check glucose readings for a coming low or high",
+                 annotations=READ_ONLY)
+    mcp.add_tool(tools.about_glucopulse_alerts, title="How GlucoPulse alerts work and were tested",
+                 annotations=READ_ONLY)
+    return mcp
+
+
+def build_stdio_mcp() -> FastMCP:
+    """Local-only server for Claude Desktop / Claude Code over stdio: the client starts this process itself and talks to
+    it through pipes, so there is no network listener to protect and no token. Same tools, same safety contract, same
+    rate limit and audit log."""
+    return _add_tools(SafeFastMCP("glucopulse", instructions=INSTRUCTIONS))
+
+
 def build_mcp(settings: Settings, host: str = "127.0.0.1", port: int = 8770) -> FastMCP:
     if settings.mode == "dev" and host not in ("127.0.0.1", "localhost", "::1"):
         raise RuntimeError("dev tokens are for local use only: bind to 127.0.0.1 or use jwks mode")
@@ -65,14 +85,8 @@ def build_mcp(settings: Settings, host: str = "127.0.0.1", port: int = 8770) -> 
                           validate_token_resource=True),
         transport_security=TransportSecuritySettings(enable_dns_rebinding_protection=True,
                                                      allowed_hosts=allowed_hosts, allowed_origins=allowed_origins),
-        instructions="GlucoPulse checks CGM glucose readings for a coming low or high. Results are screening "
-                     "information only: never use them for insulin dosing; tell the person to confirm with a meter "
-                     "and follow their care plan. Quote accuracy only from about_glucopulse_alerts.")
-    mcp.add_tool(tools.get_glucose_alert, title="Check glucose readings for a coming low or high",
-                 annotations=READ_ONLY)
-    mcp.add_tool(tools.about_glucopulse_alerts, title="How GlucoPulse alerts work and were tested",
-                 annotations=READ_ONLY)
-    return mcp
+        instructions=INSTRUCTIONS)
+    return _add_tools(mcp)
 
 
 class BodyLimit:
@@ -121,6 +135,10 @@ def build_app(settings: Settings | None = None, host: str = "127.0.0.1", port: i
 
 
 def main() -> None:  # pragma: no cover
+    import sys
+    if "--stdio" in sys.argv:                          # Claude Desktop / local clients: no network, no token
+        build_stdio_mcp().run("stdio")
+        return
     import uvicorn
     host = os.getenv("GLUCOPULSE_MCP_HOST", "127.0.0.1")
     port = int(os.getenv("GLUCOPULSE_MCP_PORT", "8770"))

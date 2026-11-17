@@ -390,3 +390,28 @@ def test_jwks_metadata_lists_issuer_exactly():
     with pytest.raises(RuntimeError):
         build_mcp(Settings("jwks", JWKS_SETTINGS.resource, "https://tenant.example.com",
                            jwks_url=JWKS_SETTINGS.jwks_url))
+
+
+def test_stdio_mode_for_claude_desktop(tmp_path):
+    """Claude Desktop starts the server as a child process (stdio): same tools, no network listener, no token."""
+    import asyncio
+    import os
+    import sys
+
+    from mcp import ClientSession, StdioServerParameters
+    from mcp.client.stdio import stdio_client
+    params = StdioServerParameters(command=sys.executable, args=["-m", "agents.public_mcp.server", "--stdio"],
+                                   env={**os.environ, "GLUCOPULSE_MCP_AUDIT_LOG": str(tmp_path / "a.jsonl")},
+                                   cwd=str(__import__("pathlib").Path(__file__).resolve().parents[2]))
+
+    async def go():
+        async with stdio_client(params) as (r, w):
+            async with ClientSession(r, w) as sess:
+                await sess.initialize()
+                names = sorted(t.name for t in (await sess.list_tools()).tools)
+                res = await sess.call_tool("get_glucose_alert", {"readings": readings(FALL)})
+                bad = await sess.call_tool("get_glucose_alert", {"readings": readings(FALL), "unit": INJECT})
+                return names, res, bad
+    names, res, bad = asyncio.run(go())
+    assert names == ["about_glucopulse_alerts", "get_glucose_alert"] and not res.isError
+    assert bad.isError and "IGNORE" not in bad.content[0].text

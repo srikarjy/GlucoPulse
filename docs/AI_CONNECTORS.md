@@ -42,6 +42,28 @@ Not controllable from the server:
 - In the Libre case, Claude added standard first-aid advice of its own (15 g of fast-acting carbohydrate).
 - In one answer it blended two accuracy figures ("68-72% of lows"; the 68% was for lows and highs together).
 
+### Claude Desktop (local, stdio, no token)
+
+Claude Desktop starts the server itself through a pipe, so there is no network port and no token. Add to
+`claude_desktop_config.json` (Settings → Developer → Edit Config) and restart Desktop:
+
+```json
+{"mcpServers": {"glucopulse": {"command": "/bin/sh",
+  "args": ["-c", "cd /path/to/GlucoPulse && .venv-pa/bin/python -m agents.public_mcp.server --stdio"]}}}
+```
+
+### Claude API (your own app, after deploy)
+
+```python
+response = client.beta.messages.create(
+    model="claude-opus-5-5", max_tokens=16000, betas=["mcp-client-2025-11-20"],
+    mcp_servers=[{"type": "url", "url": "https://<deployment>/mcp", "name": "glucopulse",
+                  "authorization_token": user_access_token}],
+    tools=[{"type": "mcp_toolset", "mcp_server_name": "glucopulse"}],
+    messages=[{"role": "user", "content": "..."}],
+)
+```
+
 ## 2. Hosted: ChatGPT and claude.ai (needs an identity provider and HTTPS)
 
 Both connect only to **remote HTTPS** MCP servers and sign users in with **OAuth 2.1 + PKCE**. GlucoPulse is the
