@@ -179,6 +179,77 @@ def run_personal(names: list[str], note: str = "") -> list[dict]:
     return rows
 
 
+# DEV RESULT (personal + tiers, 7 trials): per-person slope thresholds did not beat the trade-off (q75: .599 timely at
+# 1.98/day vs gate .637 at 1.88) and are dropped. The strict tier (gate + 2 readings in a row) reached .471 timely at
+# 1.19/day. Descriptive: of alert20's "false" alarms on CGMacros, 25% were followed by a near-high (220-250), 30% by a
+# near-low (70-85) and 14% by a large move; 31% by nothing much (strict tier: 14% nothing much).
+#
+# PRE-REGISTERED TIERS TEST (written 2026-11-16, before either tier was run on any external person for this question;
+# run with --tiers-test). Data: the 73 external people at 5-min spacing (BIG IDEAs + Hall; fourth use), all days.
+#   heads-up  = alert20; loud = gate (high >= 200, low <= 100) + 2 readings in a row. Fixed from dev.
+#   Primary   loud tier: false alarms <= 1.5/day AND timely share >= 0.40.
+#   Secondary heads-up tier timely and false alarms; what follows each tier's false alarms (near-high, near-low,
+#             large move, nothing much); ShanghaiT2DM (15 min) with loud = gate only, because a 2-reading confirmation
+#             at 15-min spacing costs 15 min of a lead that is usually 15 min.
+def false_alarm_kinds(frames, fn) -> dict:
+    kinds = dict.fromkeys(["near_high_220_250", "near_low_70_85", "large_move", "nothing_much"], 0)
+    for _, f in frames:
+        x = f["glucose"].to_numpy(float)
+        ev, a = R.events(x), fn(x)
+        blocked = np.zeros(len(x), bool)
+        for e in ev:
+            blocked[e["onset"]:min(len(x), e["end"] + 1 + R.WINDOW)] = True
+        onsets, last = np.array([e["onset"] for e in ev], int), -10 ** 9
+        for k in np.flatnonzero(a):
+            if k - last < R.LOCKOUT:
+                continue
+            last = k
+            if not (R.LO <= x[k] <= R.HI) or blocked[k] or k + R.WINDOW >= len(x):
+                continue
+            if ((onsets > k) & (onsets <= k + R.WINDOW)).any():
+                continue
+            nxt = x[k + 1:k + 1 + R.WINDOW]
+            key = ("near_high_220_250" if nxt.max() >= 220 else "near_low_70_85" if nxt.min() <= 85 else
+                   "large_move" if (nxt.max() - x[k] >= 40 or x[k] - nxt.min() >= 30) else "nothing_much")
+            kinds[key] += 1
+    n = sum(kinds.values())
+    return {"false_alarms": n, **{k: round(v / n, 3) if n else None for k, v in kinds.items()}}
+
+
+def _on_glucose(fn):
+    return lambda p, f: fn(f["glucose"].to_numpy(float))
+
+
+def tiers_test() -> dict:
+    import pandas as pd
+
+    from model.cgmacros import shanghai as S
+    ext = pd.read_pickle(ROOT / "data" / "bigideas" / "external_grid.pkl")
+    frames = list(R.segments(ext, sorted(ext.participant.unique())))
+    tiers = {"heads_up": make(), "loud": make(confirm=2, hi_gate=200, lo_gate=100)}
+    per = R.run(frames, {n: _on_glucose(fn) for n, fn in tiers.items()})
+    out = {"preregistration": "see model/cgmacros/alarms.py, PRE-REGISTERED TIERS TEST", "external_73": {}}
+    for n in tiers:
+        out["external_73"][n] = {**R.summarize(per[n], sorted(per[n])), "after_false_alarm": false_alarm_kinds(
+            frames, tiers[n])}
+    loud = out["external_73"]["loud"]
+    out["criterion_loud_fa_at_most_1.5"] = bool(loud["false_alarms_per_day"] <= 1.5)
+    out["criterion_loud_timely_at_least_0.40"] = bool(loud["timely_share"] >= 0.40)
+    out["confirmed"] = out["criterion_loud_fa_at_most_1.5"] and out["criterion_loud_timely_at_least_0.40"]
+    S.use_15min_constants()
+    sh = S.frames()
+
+    def loud15(x):
+        slope = np.r_[0.0, np.diff(x)] / 15.0
+        p = x + slope * 20.0
+        return ((p > R.HI) & (x >= 200)) | ((p < R.LO) & (x <= 100))
+    per15 = R.run(sh, {"heads_up": lambda p, f: S.alert20_15(f["glucose"].to_numpy(float)),
+                       "loud_gate_only": lambda p, f: loud15(f["glucose"].to_numpy(float))})
+    out["shanghai_15min"] = {n: R.summarize(per15[n], sorted(per15[n])) for n in per15}
+    (ROOT / "model" / "results" / "cgmacros_alarm_tiers_test.json").write_text(json.dumps(out, indent=1) + "\n")
+    return out
+
+
 def _compare(frames, a_fn, b_fn, people=None) -> dict:
     per = R.run(frames, {"alert20": lambda p, f: a_fn(f["glucose"].to_numpy(float)),
                          "gate": lambda p, f: b_fn(f["glucose"].to_numpy(float))})
@@ -226,7 +297,11 @@ def main() -> int:
     ap.add_argument("--list", action="store_true")
     ap.add_argument("--test", action="store_true")
     ap.add_argument("--personal", nargs="*", default=[])
+    ap.add_argument("--tiers-test", action="store_true")
     a = ap.parse_args()
+    if a.tiers_test:
+        r = tiers_test()
+        print(json.dumps({k: v for k, v in r.items() if k != "preregistration"}, indent=1, default=str))
     for r in run_personal(a.personal, a.note) if a.personal else []:
         print(r["trial"], "ERROR " + r["error"] if "error" in r else
               f"timely {r['timely']} (random {r['random_timely']}) FA/day {r['false_alarms_per_day']} "
