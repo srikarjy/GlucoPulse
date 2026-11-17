@@ -23,6 +23,9 @@ Then ask Claude, for example: *"Here are my last hour of CGM readings (mmol/L) â
 
 Dev mode refuses to bind anywhere but localhost.
 
+The dev token expires after 1 h, but `claude mcp add` stores the header as written. For longer sessions, configure a
+`headersHelper` that mints a fresh token instead (Claude Code docs, "dynamic headers"), or re-run the two lines above.
+
 ## 2. Hosted: ChatGPT and claude.ai (needs an identity provider and HTTPS)
 
 Both connect only to **remote HTTPS** MCP servers and sign users in with **OAuth 2.1 + PKCE**. GlucoPulse is the
@@ -61,18 +64,20 @@ Steps:
 | Forged or expired tokens | Signature (JWKS RS256/ES256 in production), `exp`/`iat` required, `alg=none` refused, dev tokens <= 12 h | `test_unsigned_and_wrongly_signed_tokens_rejected` |
 | Over-broad access | Required scope `glucose:alerts`; only two read-only tools; no stored data, no writes | `test_schema_and_read_only_annotations` |
 | DNS rebinding from a browser | Host and Origin allowlists | `test_dns_rebinding_blocked` |
-| Abuse / cost | 256 KB request cap; per-user rate limit (30 calls/min) | `test_oversized_body_rejected`, `test_rate_limit` |
-| Prompt injection through tool output | Inputs are numbers and timestamps only; **error messages never echo input** (SDK validation errors that quote the bad value are replaced with a fixed message) | `test_text_injection_attempt_cannot_reach_output` |
-| Unsafe medical use | Descriptions and every result say: screening only, not for insulin dosing, confirm with a meter; validated population stated; stale data refused unless explicitly `retrospective` (and then labelled not current); units explicit, mmol/L sent as mg/dL caught | `test_alert_on_a_fall_with_disclaimer`, `test_stale_data_refused_unless_retrospective`, `test_mmol_converted_and_mgdl_mistake_caught` |
-| Health data in logs | Audit log is metadata only (tool, outcome, count, hashed user); no glucose values or times | `test_audit_is_metadata_only` |
+| Abuse / cost | 256 KB request cap, checked before the handler, also for chunked uploads; per-user rate limit (30 calls/min) | `test_oversized_body_rejected`, `test_chunked_oversized_body_cut_off`, `test_rate_limit` |
+| Prompt injection through tool output | Inputs are numbers and timestamps only; **error messages never echo input** (SDK validation errors that quote the bad value are replaced with a fixed message) | `test_text_injection_attempt_cannot_reach_output`, `test_injection_never_echoed_from_any_field` |
+| Unsafe medical use | Descriptions and every result say: screening only, not for insulin dosing, confirm with a meter; validated population stated; stale data refused unless explicitly `retrospective` (and then labelled not current); units explicit, mmol/L sent as mg/dL caught, answers in the caller's unit | `test_alert_on_a_fall_with_disclaimer`, `test_stale_data_refused_unless_retrospective`, `test_mmol_converted_and_mgdl_mistake_caught`, `test_answer_in_callers_unit` |
+| A silent "no alert" that is really "could not check" | Timestamps snapped to the 5-min grid (real exports drift by seconds); fewer than 4 consecutive 5-min readings (e.g. 15-min Libre history) is an error that says it is NOT an all-clear | `test_cgm_export_drift_still_gives_a_trend`, `test_fifteen_minute_data_is_refused_not_all_clear` |
+| Health data in logs | Audit log is metadata only (tool, outcome, count, keyed HMAC of the user id; set `GLUCOPULSE_MCP_AUDIT_KEY`); no glucose values or times | `test_audit_is_metadata_only` |
+| Forged production tokens | RS256/ES256 only; HS256 "signed" with the public key (algorithm confusion) refused; other keys refused; metadata lists the IdP issuer exactly | `test_jwks_*` (offline, with a generated RSA key) |
 | Dev credentials in production | Dev mode only binds to localhost; jwks mode requires an https resource URL | `test_dev_mode_refuses_public_bind` |
 
-All tests: `.venv-pa/bin/python -m pytest tests/agents/test_public_mcp.py` (25 tests, including an end-to-end call
-from a real MCP client over HTTP).
+All tests: `.venv-pa/bin/python -m pytest tests/agents/test_public_mcp.py` (38 tests, including an end-to-end call
+from a real MCP client over HTTP and the production token path with a generated RSA key).
 
 ## 4. Not done yet
 
-- **Production auth is untested against a real IdP:** the jwks path has no live test yet.
+- **Production auth is tested offline only** (generated RSA key). It has not run against a real IdP.
 - **No real ChatGPT or claude.ai connection yet:** it needs a public HTTPS host.
 - **Before any real-patient use:** a data-protection review (the audit log is metadata only, but readings pass through
   the assistant provider) and a clinical review of the alert wording.

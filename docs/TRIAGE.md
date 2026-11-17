@@ -805,6 +805,28 @@ Not wired into the app (from §11-14):
 - The new forecaster stays research-only. The API's `/predict` still serves the original model.
 - Swapping it in needs a serving export of the boosted-tree + Chronos-2 blend, and Chronos-2 needs its own service.
 
+## 20. ChatGPT and Claude can use the alerts: a public MCP server
+
+`agents/public_mcp/` serves two read-only MCP tools, `get_glucose_alert` and `about_glucopulse_alerts`. Setup and the
+full threat model are in `docs/AI_CONNECTORS.md`.
+- **Auth:** it is an OAuth resource server for an external IdP, with protected-resource metadata and audience-bound
+  tokens. It is separate from the internal clinical-agent server, whose tokens are rejected.
+- **Safety in the tool contract:**
+  - stateless, with caller-supplied readings only;
+  - units are explicit;
+  - stale data is refused unless asked for as retrospective;
+  - "could not check" is an error, never a silent "no alert";
+  - error messages never echo input;
+  - every result carries the validated population and a not-for-dosing disclaimer.
+- **Bugs found while building it:**
+  - SDK validation errors quoted injected text back to the model, so all errors are now sanitized.
+  - Real CGM exports drift by seconds, which silently broke the 5-min history, so timestamps are now snapped to the
+    grid. This also fixes `/alerts`.
+  - Chunked oversized uploads crashed the size guard, so bodies are now checked before the handler.
+- **Tests:** 38 for this server, including an end-to-end MCP client call and offline checks of the production token
+  path.
+- **Still needed:** an IdP and a public HTTPS host before ChatGPT or claude.ai can connect.
+
 ## Limits
 
 - Population: adults without insulin therapy; nothing here transfers to type 1 diabetes.

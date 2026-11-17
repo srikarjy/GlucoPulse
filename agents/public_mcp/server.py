@@ -45,6 +45,13 @@ READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, idempotent
 def build_mcp(settings: Settings, host: str = "127.0.0.1", port: int = 8770) -> FastMCP:
     if settings.mode == "dev" and host not in ("127.0.0.1", "localhost", "::1"):
         raise RuntimeError("dev tokens are for local use only: bind to 127.0.0.1 or use jwks mode")
+    if settings.mode == "jwks":
+        from pydantic import AnyHttpUrl
+        if str(AnyHttpUrl(settings.issuer)) != settings.issuer:
+            # the protected-resource metadata must list the IdP's issuer EXACTLY (ChatGPT checks); pydantic would
+            # silently add a trailing slash to a bare-host issuer
+            raise RuntimeError(f"GLUCOPULSE_MCP_ISSUER must be written exactly as the IdP's issuer, e.g. "
+                               f"{AnyHttpUrl(settings.issuer)}")
     public = urlparse(settings.resource)
     allowed_hosts = ["127.0.0.1:*", "localhost:*", "[::1]:*"] + ([public.netloc] if public.netloc else [])
     allowed_origins = ["http://127.0.0.1:*", "http://localhost:*", "http://[::1]:*",
@@ -69,33 +76,36 @@ def build_mcp(settings: Settings, host: str = "127.0.0.1", port: int = 8770) -> 
 
 
 class BodyLimit:
-    """Reject requests whose body exceeds MAX_BODY bytes (declared or streamed)."""
+    """Reject requests whose body exceeds MAX_BODY bytes, declared or streamed (chunked). The body is read and checked
+    BEFORE the MCP app sees the request (MCP messages are small JSON), so an oversized upload never reaches the
+    handler and the 413 is the only response sent."""
 
     def __init__(self, app, limit: int = MAX_BODY):
         self.app, self.limit = app, limit
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] != "http":
+        if scope["type"] != "http" or scope.get("method") in ("GET", "HEAD", "OPTIONS"):
             return await self.app(scope, receive, send)
         declared = dict(scope.get("headers") or []).get(b"content-length")
-        if declared and int(declared) > self.limit:
+        if declared and declared.isdigit() and int(declared) > self.limit:
             return await self._too_large(send)
-        seen = 0
-
-        async def limited():
-            nonlocal seen
+        chunks, size = [], 0
+        while True:
             msg = await receive()
-            if msg["type"] == "http.request":
-                seen += len(msg.get("body", b""))
-                if seen > self.limit:
-                    raise ValueError("request body too large")
-            return msg
-        try:
-            await self.app(scope, limited, send)
-        except ValueError as e:
-            if "too large" not in str(e):
-                raise
-            await self._too_large(send)
+            if msg["type"] == "http.disconnect":
+                return
+            body = msg.get("body", b"")
+            size += len(body)
+            if size > self.limit:
+                return await self._too_large(send)
+            chunks.append(body)
+            if not msg.get("more_body"):
+                break
+        buffered = [{"type": "http.request", "body": b"".join(chunks), "more_body": False}]
+
+        async def replay():
+            return buffered.pop() if buffered else await receive()
+        await self.app(scope, replay, send)
 
     @staticmethod
     async def _too_large(send):

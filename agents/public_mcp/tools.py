@@ -11,7 +11,9 @@ Safety rules built into the contract:
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
+import secrets
 import os
 import threading
 import time
@@ -28,6 +30,9 @@ STALE_AFTER = timedelta(minutes=15)
 FUTURE_SLACK = timedelta(minutes=5)
 RATE_PER_MIN = int(os.getenv("GLUCOPULSE_MCP_RATE_PER_MIN", "30"))
 AUDIT = Path(os.getenv("GLUCOPULSE_MCP_AUDIT_LOG", "logs/public_mcp_audit.jsonl"))
+# keyed hash of the user id in the audit log (a plain hash of a guessable id, e.g. an email, can be reversed). Without
+# GLUCOPULSE_MCP_AUDIT_KEY a random per-process key is used, so hashes are not linkable across restarts.
+AUDIT_KEY = (os.getenv("GLUCOPULSE_MCP_AUDIT_KEY") or secrets.token_hex(32)).encode()
 
 VALIDATED = ("Tested on adults NOT using insulin (CGMacros; BIG IDEAs; Hall 2018; ShanghaiT2DM non-insulin). Not "
              "validated for type 1 diabetes, insulin users, children or pregnancy.")
@@ -66,7 +71,7 @@ def _audit(tool: str, subject: str, outcome: str, **meta) -> None:
     """Metadata only: no glucose values, no times of readings, no identifiers beyond a hashed subject."""
     AUDIT.parent.mkdir(parents=True, exist_ok=True)
     rec = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "tool": tool, "outcome": outcome,
-           "subject_sha256": hashlib.sha256(subject.encode()).hexdigest()[:16], **meta}
+           "subject_hmac": hmac.new(AUDIT_KEY, subject.encode(), hashlib.sha256).hexdigest()[:16], **meta}
     with AUDIT.open("a") as fh:
         fh.write(json.dumps(rec) + "\n")
 
@@ -120,11 +125,23 @@ def get_glucose_alert(readings: list[Reading], unit: Literal["mg/dL", "mmol/L"] 
             raise ToolError("the latest reading is more than 15 minutes old, so this cannot be a current alert; "
                             "call again with mode='retrospective' to review past data")
         res = evaluate(series)
+        if res["continuous_readings"] < 4:
+            raise ToolError("cannot check: the latest readings are not a run of at least 4 readings about 5 minutes "
+                            "apart (20 minutes). 15-minute data (e.g. Libre history) or gaps cannot be used; this is "
+                            "NOT an all-clear")
     except ToolError as e:
         _audit("get_glucose_alert", subject, "rejected", n_readings=len(readings), reason=str(e)[:60])
         raise
     _audit("get_glucose_alert", subject, "ok", n_readings=len(readings), mode=mode)
-    out = {"mode": mode, "alert": res["alert"], "direction": res["direction"], "reason": res["reason"],
+    k = MGDL_PER_MMOL if unit == "mmol/L" else 1.0
+    fmt = (lambda v: f"{v / k:.1f} mmol/L") if unit == "mmol/L" else (lambda v: f"{v:.0f} mg/dL")
+    reason = None
+    if res["alert"]:
+        reason = (f"Glucose {fmt(res['current_glucose'])} and "
+                  f"{'rising' if res['direction'] == 'high' else 'falling'}; on this trend it would be about "
+                  f"{fmt(res['projected_20min'])} in 20 minutes.")
+    out = {"mode": mode, "alert": res["alert"], "direction": res["direction"], "reason": reason, "unit": unit,
+           "current_glucose": round(res["current_glucose"] / k, 1), "projected_20min": round(res["projected_20min"] / k, 1),
            "current_glucose_mg_dl": res["current_glucose"], "projected_20min_mg_dl": res["projected_20min"],
            "continuous_readings_used": res["continuous_readings"],
            "earlier_alerts_in_window": [{"time": a["timestamp"], "tier": a["tier"], "direction": a["direction"]}
@@ -132,9 +149,6 @@ def get_glucose_alert(readings: list[Reading], unit: Literal["mg/dL", "mmol/L"] 
            "validated_population": VALIDATED, "disclaimer": DISCLAIMER}
     if mode == "retrospective":
         out["note"] = "Retrospective review of past data: this is NOT a current alert."
-    if res["continuous_readings"] < 4:
-        out["note"] = (out.get("note", "") + " Fewer than 4 consecutive 5-minute readings at the end: no trend could be "
-                       "computed, so no alert is possible.").strip()
     return out
 
 
@@ -154,7 +168,10 @@ def about_glucopulse_alerts() -> dict:
                                                                             "not followed by an event, 79% of them "
                                                                             "near-lows (glucose reached 70-85)",
             "ShanghaiT2DM (42 adults with type 2 diabetes, no insulin, 15-min CGM)": "97% of highs and 85% of lows "
-                                                                                    "warned, usually 15 min ahead",
+                                                                                    "warned, usually 15 min ahead, "
+                                                                                    "by a 15-minute version of the "
+                                                                                    "alert; THIS tool needs 5-minute "
+                                                                                    "readings",
             "loud tier on the 73": "53% of lows warned >= 15 min ahead; ~2.1 alerts/day not followed by an event "
                                    "(84% near-lows); missed its pre-set target of <= 1.5/day",
         },

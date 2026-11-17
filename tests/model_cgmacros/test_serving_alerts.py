@@ -82,3 +82,12 @@ def test_api_endpoint(monkeypatch):
     assert body["alerts_in_window"] and "not a diagnosis" in body["disclaimer"]
     bad = c.post("/alerts", json={"patient_id": "demo-1", "readings": list(reversed(readings))})
     assert bad.status_code == 422
+
+
+def test_export_drift_snapped_and_15min_gives_no_trend():
+    drift = [(T0 + timedelta(minutes=5 * i, seconds=(31 if i % 2 else 32)), v)
+             for i, v in enumerate([130 - 4 * k for k in range(14)])]
+    assert evaluate(drift)["continuous_readings"] == 14
+    fifteen = series([150, 130, 110, 90, 80])
+    fifteen = [(T0 + timedelta(minutes=15 * i), v) for i, (_, v) in enumerate(fifteen)]
+    assert evaluate(fifteen)["continuous_readings"] == 1

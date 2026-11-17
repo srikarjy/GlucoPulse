@@ -15,6 +15,7 @@ Modes (GLUCOPULSE_MCP_AUTH_MODE):
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 from dataclasses import dataclass
@@ -83,7 +84,8 @@ class Verifier:
 
     async def verify_token(self, token: str) -> AccessToken | None:
         try:
-            claims = self.decode(token)
+            # the JWKS fetch on a cache miss is blocking HTTP: keep it off the event loop
+            claims = await asyncio.to_thread(self.decode, token) if self._jwks else self.decode(token)
         except (jwt.PyJWTError, jwt.PyJWKClientError):
             return None
         scopes = _scopes(claims)
