@@ -781,6 +781,30 @@ For the strict tier, "nothing much" was 14%.
   - The strict event definition (3 readings below 70) labels a correct heads-up about a near-low as false. That is a
     choice of definition, not a model error.
 
+## 19. In the app: `POST /alerts`
+
+`serving/alerts.py` (numpy only, because the serving image ships nothing from `model/`) and `POST /alerts` in
+`serving/api.py`:
+- **Request:** the patient's recent readings, oldest first, 5 min apart (at least 4; ideally the last 2 h).
+- **Response:** the alert at the latest reading (`heads_up`, `loud` or none), its direction, a plain-language reason
+  ("Glucose 98 mg/dL and falling; on this trend it would be about 74 mg/dL in 20 min"), the 20-min projection, the
+  alerts earlier in the window, and a disclaimer.
+- **Wording:** alerts say where glucose is heading, not that a low or high has happened. Most "false" alerts are
+  near-misses (§18).
+- **Same auth, audit trail and stale-data refusal as `/predict`.** Readings out of time order are rejected.
+- **Stateless:** the 30-min quiet period is rebuilt from the readings sent.
+
+The rules are the tested ones:
+- **heads-up** = alert20 (§9, §15, §16);
+- **loud** = level gate + 2 readings in a row (§17-18).
+
+`tests/model_cgmacros/test_serving_alerts.py` checks that the API copy fires exactly where the research code fires on
+CGMacros (every in-range reading of 15 people), plus synthetic streams and the endpoint itself.
+
+Not wired into the app (from §11-14):
+- The new forecaster stays research-only. The API's `/predict` still serves the original model.
+- Swapping it in needs a serving export of the boosted-tree + Chronos-2 blend, and Chronos-2 needs its own service.
+
 ## Limits
 
 - Population: adults without insulin therapy; nothing here transfers to type 1 diabetes.
