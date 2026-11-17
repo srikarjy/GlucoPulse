@@ -1,0 +1,16 @@
+# ALLOWLIST: upload only what the public MCP function needs. Everything else (data/ with participant data,
+# model artifacts, venvs, logs, research code) never leaves this machine.
+/*
+!/api
+!/agents
+!/serving
+!/requirements.txt
+!/vercel.json
+!/.python-version
+/agents/*
+!/agents/__init__.py
+!/agents/public_mcp
+/serving/*
+!/serving/__init__.py
+!/serving/alerts.py
+**/__pycache__

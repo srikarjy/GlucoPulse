@@ -68,10 +68,14 @@ LIMITER = RateLimiter(RATE_PER_MIN)
 
 
 def _audit(tool: str, subject: str, outcome: str, **meta) -> None:
-    """Metadata only: no glucose values, no times of readings, no identifiers beyond a hashed subject."""
-    AUDIT.parent.mkdir(parents=True, exist_ok=True)
+    """Metadata only: no glucose values, no times of readings, no identifiers beyond a keyed hash of the subject.
+    GLUCOPULSE_MCP_AUDIT_LOG=stdout writes to the platform log stream (serverless hosts have no writable disk)."""
     rec = {"at": datetime.now(timezone.utc).isoformat(timespec="seconds"), "tool": tool, "outcome": outcome,
            "subject_hmac": hmac.new(AUDIT_KEY, subject.encode(), hashlib.sha256).hexdigest()[:16], **meta}
+    if str(AUDIT) == "stdout":
+        print(json.dumps({"glucopulse_audit": rec}), flush=True)
+        return
+    AUDIT.parent.mkdir(parents=True, exist_ok=True)
     with AUDIT.open("a") as fh:
         fh.write(json.dumps(rec) + "\n")
 

@@ -55,6 +55,41 @@ Steps:
    Both read `/.well-known/oauth-protected-resource/mcp`, send the user to your IdP, and call the tools with the
    returned token.
 
+### Hosting on Vercel (chosen host)
+
+`api/index.py` is the Vercel function. Each request builds a fresh stateless server, because serverless platforms may
+not run ASGI startup events. `vercel.json` routes every path to it and sets HSTS, nosniff and no-store.
+
+**Deploy only from a staged copy.** `data/` in this repository holds participant data, and `vercel` uploads the folder
+it runs in:
+```bash
+scripts/vercel_stage.sh /tmp/glucopulse-mcp-deploy   # copies 12 allowlisted files; refuses data-like files
+cd /tmp/glucopulse-mcp-deploy && vercel deploy --prod
+```
+`.vercelignore` is a second, allowlist-style guard.
+
+**Project environment variables** (Production; never commit them):
+
+| Variable | Value |
+|---|---|
+| `GLUCOPULSE_MCP_AUTH_MODE` | `jwks` |
+| `GLUCOPULSE_MCP_RESOURCE` | `https://<project>.vercel.app/mcp`: the stable production domain, which must also be the IdP API identifier |
+| `GLUCOPULSE_MCP_ISSUER` | the IdP issuer exactly, e.g. `https://<tenant>.us.auth0.com/` |
+| `GLUCOPULSE_MCP_JWKS_URL` | e.g. `https://<tenant>.us.auth0.com/.well-known/jwks.json` |
+| `GLUCOPULSE_MCP_AUDIT_KEY` | 32+ random characters (keyed hash of user ids in logs) |
+| `GLUCOPULSE_MCP_AUDIT_LOG` | `stdout` (Vercel's log stream; there is no writable disk) |
+
+**Auth0 as the IdP.** Check the current setting names in Auth0's docs when doing this; they change.
+1. Create an API whose identifier is the `GLUCOPULSE_MCP_RESOURCE` URL, signed with RS256.
+   - Add the permission `glucose:alerts`.
+   - Enable RBAC and "add permissions in the access token".
+   - Allow offline access, so refresh tokens work for ChatGPT.
+2. Tenant settings:
+   - Enable dynamic client registration, so ChatGPT and claude.ai can register themselves.
+   - Make Auth0 accept the OAuth `resource` parameter as the audience. MCP clients send `resource`, not `audience`.
+   - Promote a login connection to domain level, so dynamically registered clients can use it.
+3. Give the users who should have access the `glucose:alerts` permission.
+
 ## 3. Security and safety controls
 
 | Threat | Control | Test |
@@ -81,6 +116,7 @@ from a real MCP client over HTTP and the production token path with a generated 
 - **No real ChatGPT or claude.ai connection yet:** it needs a public HTTPS host.
 - **Before any real-patient use:** a data-protection review (the audit log is metadata only, but readings pass through
   the assistant provider) and a clinical review of the alert wording.
-- **Rate limits are per process,** in memory. Run one instance, or move the limiter to Redis before scaling out.
+- **Rate limits are per process,** in memory, which means per function instance on Vercel. Before real traffic, move
+  the limiter to a shared store (e.g. Upstash Redis) or rely on Vercel's firewall rate limiting.
 - **CGMacros data must not be sent through this server.** Its CC BY-NC-SA licence has not been checked for third-party
   LLM use.
