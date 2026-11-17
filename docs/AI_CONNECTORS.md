@@ -4,7 +4,7 @@ GlucoPulse exposes a small, read-only **MCP server** (`agents/public_mcp/`) that
 
 | Tool | What it does |
 |---|---|
-| `get_glucose_alert(readings, unit, mode)` | Checks recent CGM readings (sent by the caller) for a coming low (< 70) or high (> 250) with the tested two-tier trend alert. Returns none / `heads_up` / `loud`, the direction, a plain-language reason, the 20-min projection, the validated population and a disclaimer. |
+| `get_glucose_alert(readings, unit, mode)` | Checks recent CGM readings (sent by the caller) for a coming low (< 70) or high (> 250) with the tested two-tier trend alert. Returns a `status` that is never empty (`low_now` / `high_now` / `loud` / `heads_up` / `ongoing` (still heading out during the 30-min quiet period) / `watch` / `ok`), a `say_to_person` sentence, the 20-min projection (capped to the 40-400 sensor range; none once already out of range), the trend per minute, notes on adjusted values, the validated population and a disclaimer. The tested alarm rules are unchanged; `status` is computed on top of them. |
 | `about_glucopulse_alerts()` | The tested accuracy and limits, so an assistant quotes real numbers (docs/TRIAGE.md §9, §15-19). |
 
 Nothing is stored, no stored patient data can be read, and no tool changes anything. Forecasts and triage levels from
