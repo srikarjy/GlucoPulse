@@ -471,6 +471,9 @@ async def alerts(request: AlertRequest, req: Request, authorization: Optional[st
             raise HTTPException(422, detail="Readings must be in time order, oldest first, without duplicates.")
         _check_not_stale(times[-1])
         result = evaluate([(t.to_pydatetime(), r.glucose_value) for t, r in zip(times, request.readings)])
+        if result["continuous_readings"] < 4:
+            raise HTTPException(422, detail=("Cannot check: the latest readings are not a run of at least 4 readings "
+                                             "about 5 minutes apart. This is not an all-clear."))
     except HTTPException as exc:
         _audit_predict(exc.status_code, "error", request.patient_id, req, who, "alerts", "/alerts")
         raise

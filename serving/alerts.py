@@ -6,9 +6,13 @@ model/cgmacros/replay.py and model/cgmacros/alarms.py is checked in tests/model_
             72% of lows (ShanghaiT2DM: 97% of highs) >= 15 min ahead; ~3 alerts/day that did not end in an event,
             most of them near-misses (glucose came within 70-85 or 220-250).
   loud      the same projection, only if glucose is already >= 200 (heading high) or <= 100 (heading low), on two
-            readings in a row. Catches about half as many events in time with about a third fewer non-event alerts.
+            readings in a row; OR, from any level, the projection is out of range and glucose is moving >= 1.5 mg/dL/min,
+            on two readings in a row (fast-fall escalation, docs/TRIAGE.md / alarms.py FAST-FALL protocol: on the 73
+            external people timely .526 -> .542, 95% CI of the gain [.003, .033], +0.13 false alarms/day).
 An alert opens a 30-min quiet period for its tier; a loud alert may still escalate during a heads-up quiet period.
-Readings must be 5 min apart; any other gap restarts the history.
+Readings are snapped to the 5-minute grid (floored, first reading per slot kept), exactly as the research data were
+binned, so the few seconds of drift in real CGM exports do not break the history; any gap after snapping restarts it.
+At least 4 consecutive 5-minute readings are needed for a trend (15-minute data, e.g. Libre history, cannot be used).
 """
 from __future__ import annotations
 
@@ -20,6 +24,7 @@ LO, HI = 70.0, 250.0
 STEP = timedelta(minutes=5)
 LOCKOUT = 6                       # readings (30 min)
 GATE_HI, GATE_LO = 200.0, 100.0
+FAST = 1.5                        # mg/dL per min: fast-move escalation to loud
 DISCLAIMER = ("Screening alert from CGM trend data, not a diagnosis or treatment advice. Confirm with a meter before "
               "acting; follow your care plan.")
 
@@ -36,13 +41,28 @@ def slope15(x: np.ndarray) -> np.ndarray:
 
 def flags(x: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """Per reading: heads_up, loud, projected value 20 min ahead."""
-    proj = x + slope15(x) * 20.0
+    sl = slope15(x)
+    proj = x + sl * 20.0
     up, down = proj > HI, proj < LO
     heads = up | down
     hi = up & (x >= GATE_HI)
     lo = down & (x <= GATE_LO)
-    loud = (hi & np.r_[False, hi[:-1]]) | (lo & np.r_[False, lo[:-1]])
+    fast = heads & (np.abs(sl) >= FAST)
+    two = lambda a: a & np.r_[False, a[:-1]]                       # noqa: E731  (2 readings in a row)
+    loud = two(hi) | two(lo) | two(fast)
     return heads, loud, proj
+
+
+def snap(readings: list[tuple[datetime, float]]) -> list[tuple[datetime, float]]:
+    """Floor timestamps to the 5-minute grid and keep the first reading in each slot (as dataset.grid_from_measurements
+    does for the research data)."""
+    out, seen = [], set()
+    for t, g in sorted(readings, key=lambda r: r[0]):
+        slot = t - timedelta(minutes=t.minute % 5, seconds=t.second, microseconds=t.microsecond)
+        if slot not in seen:
+            seen.add(slot)
+            out.append((slot, g))
+    return out
 
 
 def segment_tail(readings: list[tuple[datetime, float]]) -> list[tuple[datetime, float]]:
@@ -57,7 +77,7 @@ def segment_tail(readings: list[tuple[datetime, float]]) -> list[tuple[datetime,
 
 def evaluate(readings: list[tuple[datetime, float]]) -> dict:
     """Run the alert rules over a window of readings (oldest first) and report the state at the last reading."""
-    seg = segment_tail(readings)
+    seg = segment_tail(snap(readings))
     x = np.array([g for _, g in seg], dtype=float)
     heads, loud, proj = flags(x)
     last = {"heads_up": -10 ** 9, "loud": -10 ** 9}

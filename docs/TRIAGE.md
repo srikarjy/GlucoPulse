@@ -805,6 +805,50 @@ Not wired into the app (from §11-14):
 - The new forecaster stays research-only. The API's `/predict` still serves the original model.
 - Swapping it in needs a serving export of the boosted-tree + Chronos-2 blend, and Chronos-2 needs its own service.
 
+## 20. ChatGPT and Claude can use the alerts: a public MCP server
+
+`agents/public_mcp/` serves two read-only MCP tools, `get_glucose_alert` and `about_glucopulse_alerts`. Setup and the
+full threat model are in `docs/AI_CONNECTORS.md`.
+- **Auth:** it is an OAuth resource server for an external IdP, with protected-resource metadata and audience-bound
+  tokens. It is separate from the internal clinical-agent server, whose tokens are rejected.
+- **Safety in the tool contract:**
+  - stateless, with caller-supplied readings only;
+  - units are explicit;
+  - stale data is refused unless asked for as retrospective;
+  - "could not check" is an error, never a silent "no alert";
+  - error messages never echo input;
+  - every result carries the validated population and a not-for-dosing disclaimer.
+- **Bugs found while building it:**
+  - SDK validation errors quoted injected text back to the model, so all errors are now sanitized.
+  - Real CGM exports drift by seconds, which silently broke the 5-min history, so timestamps are now snapped to the
+    grid. This also fixes `/alerts`.
+  - Chunked oversized uploads crashed the size guard, so bodies are now checked before the handler.
+- **Tests:** 38 for this server, including an end-to-end MCP client call and offline checks of the production token
+  path.
+- **Still needed:** an IdP and a public HTTPS host before ChatGPT or claude.ai can connect.
+
+## 21. Fast falls reach the loud tier sooner
+
+A review of the MCP tool by a second Claude session found that the loud tier needs glucose already at or below 100
+(or at or above 200) on two readings in a row, so a fast fall from higher up got only a heads-up even with a deeper
+projection than a slow fall that was already loud. Protocol written before any trial (model/cgmacros/alarms.py,
+FAST-FALL ESCALATION PROTOCOL): loud = the existing rule OR, from any level, projection out of range and |15-min slope|
+>= 1.5 mg/dL/min on two readings in a row.
+
+| | timely (>= 15 min) | false alarms/day |
+|---|---|---|
+| Dev, 45 CGMacros: existing loud | .475 | 1.30 |
+| Dev: + projection < 55 / > 300 | .480 | 1.35 |
+| Dev: + fast move (chosen) | .511 | 1.67 |
+| Dev: both | .511 | 1.67 (tie; protocol had no tie-break, simpler arm taken) |
+| **Test, 73 external people: existing loud** | **.526** | **2.13** |
+| **Test: + fast move** | **.542** (gain 95% CI .003 to .033) | **2.26** (+0.13) |
+
+Both pre-registered criteria were met (gain lower bound > 0; at most +0.5 false alarms/day), so `serving/alerts.py`
+uses it (parity with the research code is tested). The gain is small. Because a rule needs two readings in a row, a
+2 mg/dL/min fall still becomes loud at about 90 rather than at 100; falls of 3 mg/dL/min or faster become loud a
+reading sooner. The 73 have been used five times now; the next change to the alarm needs new external data.
+
 ## Limits
 
 - Population: adults without insulin therapy; nothing here transfers to type 1 diabetes.

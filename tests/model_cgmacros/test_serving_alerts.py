@@ -19,12 +19,12 @@ def series(values, start=T0):
 def test_parity_with_research_rules_on_cgmacros():
     pytest.importorskip("pandas")
     from model.cgmacros import replay as R
-    from model.cgmacros.alarms import make
+    from model.cgmacros.alarms import ESC_CHOSEN, ESC
     from model.cgmacros.dataset import CACHE, build_grid
     if not CACHE.exists():
         pytest.skip("CGMacros grid not built here")
     g = build_grid()
-    loud_ref = make(confirm=2, hi_gate=200, lo_gate=100)
+    loud_ref = ESC[ESC_CHOSEN]                          # strict + fast-fall escalation (tested)
     n = 0
     for _, f in R.segments(g, sorted(g.participant.unique())[:15]):
         x = f["glucose"].to_numpy(float)
@@ -82,3 +82,26 @@ def test_api_endpoint(monkeypatch):
     assert body["alerts_in_window"] and "not a diagnosis" in body["disclaimer"]
     bad = c.post("/alerts", json={"patient_id": "demo-1", "readings": list(reversed(readings))})
     assert bad.status_code == 422
+
+
+def test_export_drift_snapped_and_15min_gives_no_trend():
+    drift = [(T0 + timedelta(minutes=5 * i, seconds=(31 if i % 2 else 32)), v)
+             for i, v in enumerate([130 - 4 * k for k in range(14)])]
+    assert evaluate(drift)["continuous_readings"] == 14
+    fifteen = series([150, 130, 110, 90, 80])
+    fifteen = [(T0 + timedelta(minutes=15 * i), v) for i, (_, v) in enumerate(fifteen)]
+    assert evaluate(fifteen)["continuous_readings"] == 1
+
+
+def test_fast_fall_from_above_100_gets_loud():
+    """Review finding: a fast fall only got heads_up until glucose was <= 100 twice. At 3 mg/dL/min the escalation
+    makes it loud at 100 (one reading earlier than the gate allows: 115 was outside it)."""
+    vals = [190 - 15 * k for k in range(7)]                    # 190 -> 100
+    out = evaluate(series(vals))
+    assert out["alert"] == "loud" and out["direction"] == "low"
+    from serving import alerts as A
+    x = np.array(vals, float)
+    sl = A.slope15(x)
+    proj = x + sl * 20
+    strict_lo = (proj < A.LO) & (x <= A.GATE_LO)
+    assert not (strict_lo[-1] and strict_lo[-2])               # the old rule would NOT have been loud here
