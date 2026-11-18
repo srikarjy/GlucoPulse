@@ -290,6 +290,62 @@ def test() -> dict:
     return res
 
 
+# ================================================================ FAST-FALL ESCALATION PROTOCOL (2026-11-17, before any trial)
+# Problem   the loud tier needs glucose already <= 100 (lows) / >= 200 (highs) on two readings in a row, so a FAST move
+#           from further away only gets a heads-up even when its projection is deeper: a real-Claude review of the MCP
+#           tool found 160 -> 100 at 2 mg/dL/min returned heads_up (projection 60) while a slow 105 -> 81 got loud.
+# Arms      loud tier = strict (gate + 2 in a row, unchanged) OR an escalation confirmed on 2 readings, with no gate:
+#             esc_sev   projection < 55 (lows; 54 = level-2 hypoglycaemia) or > 300 (highs)
+#             esc_fast  projection outside 70-250 and |15-min slope| >= 1.5 mg/dL/min
+#             esc_both  either
+#           Comparator: strict (confirm2_gate) on the same frames.
+# Dev       all 45 CGMacros people, scored by replay.py unchanged; at most 4 trials, each appended to alarm_log.jsonl.
+#           Choose the arm with the highest timely share whose false alarms/day are <= strict + 0.5; none -> stop.
+# Test      (run with --esc-test) the chosen arm vs strict on the 73 external people at 5-min spacing (BIG IDEAs + Hall;
+#           fifth use). Primary, both: (1) 95% person-bootstrap lower bound of timely(arm) - timely(strict) > 0;
+#           (2) false alarms/day increase (point estimate) <= 0.5. Secondary: lows alone, median lead, heads-up tier
+#           unchanged. If not confirmed, the alarm rule is not changed.
+def make_esc(sev: bool, fast: bool):
+    strict = make(confirm=2, hi_gate=200, lo_gate=100)
+
+    def alarm(x: np.ndarray) -> np.ndarray:
+        p, sl = _proj(x), np.abs(R.slope15(x))
+        e = np.zeros(len(x), bool)
+        if sev:
+            e |= _consecutive(p < 55, 2) | _consecutive(p > 300, 2)
+        if fast:
+            e |= _consecutive(((p < R.LO) | (p > R.HI)) & (sl >= 1.5), 2)
+        return strict(x) | e
+    return alarm
+
+
+ESC = {"esc_sev": make_esc(True, False), "esc_fast": make_esc(False, True), "esc_both": make_esc(True, True)}
+VARIANTS.update(ESC)
+# DEV RESULT (4 trials, 45 CGMacros people, loud tier): strict .475 timely at 1.30 FA/day; esc_sev .480 at 1.35;
+# esc_fast .511 at 1.67; esc_both .511 at 1.67 (identical). Rule picks the highest timely within 1.80 FA/day: esc_fast
+# and esc_both tie; the protocol had no tie-break, so the simpler arm (esc_fast) is taken. Chosen before --esc-test.
+ESC_CHOSEN = "esc_fast"
+
+
+def esc_test() -> dict:
+    import pandas as pd
+    assert ESC_CHOSEN in ESC, "choose the arm from the dev trials first"
+    ext = pd.read_pickle(ROOT / "data" / "bigideas" / "external_grid.pkl")
+    people = sorted(ext.participant.unique())
+    frames = list(R.segments(ext, people))
+    arms = {"strict": make(confirm=2, hi_gate=200, lo_gate=100), ESC_CHOSEN: ESC[ESC_CHOSEN]}
+    per = R.run(frames, {n: _on_glucose(fn) for n, fn in arms.items()})
+    out = {"preregistration": "model/cgmacros/alarms.py, FAST-FALL ESCALATION PROTOCOL", "arm": ESC_CHOSEN,
+           **{n: R.summarize(per[n], people) for n in arms}}
+    out["timely_diff_ci95"] = R.boot(per[ESC_CHOSEN], per["strict"], people)
+    out["fa_increase_per_day"] = round(out[ESC_CHOSEN]["false_alarms_per_day"] - out["strict"]["false_alarms_per_day"], 2)
+    out["criterion_1_more_timely"] = bool(out["timely_diff_ci95"][0] > 0)
+    out["criterion_2_fa_increase_at_most_0.5"] = bool(out["fa_increase_per_day"] <= 0.5)
+    out["confirmed"] = out["criterion_1_more_timely"] and out["criterion_2_fa_increase_at_most_0.5"]
+    (ROOT / "model" / "results" / "cgmacros_alarm_esc_test.json").write_text(json.dumps(out, indent=1) + "\n")
+    return out
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--trial", nargs="*", default=[])
@@ -298,7 +354,11 @@ def main() -> int:
     ap.add_argument("--test", action="store_true")
     ap.add_argument("--personal", nargs="*", default=[])
     ap.add_argument("--tiers-test", action="store_true")
+    ap.add_argument("--esc-test", action="store_true")
     a = ap.parse_args()
+    if a.esc_test:
+        r = esc_test()
+        print(json.dumps({k: v for k, v in r.items() if k != "preregistration"}, indent=1, default=str))
     if a.tiers_test:
         r = tiers_test()
         print(json.dumps({k: v for k, v in r.items() if k != "preregistration"}, indent=1, default=str))

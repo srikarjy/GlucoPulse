@@ -1,0 +1,50 @@
+{
+ "preregistration": "model/cgmacros/alarms.py, FAST-FALL ESCALATION PROTOCOL",
+ "arm": "esc_fast",
+ "strict": {
+  "events": 308,
+  "people_with_events": 51,
+  "days": 494.1,
+  "timely_share": 0.526,
+  "random_timely_share": 0.256,
+  "warned_at_all": 0.776,
+  "median_lead_min_if_warned": 20.0,
+  "false_alarms_per_day": 2.13,
+  "random_false_alarms_per_day": 4.37,
+  "high": {
+   "n": 3,
+   "timely": 0.333
+  },
+  "low": {
+   "n": 305,
+   "timely": 0.528
+  }
+ },
+ "esc_fast": {
+  "events": 308,
+  "people_with_events": 51,
+  "days": 494.1,
+  "timely_share": 0.542,
+  "random_timely_share": 0.266,
+  "warned_at_all": 0.779,
+  "median_lead_min_if_warned": 20.0,
+  "false_alarms_per_day": 2.26,
+  "random_false_alarms_per_day": 4.66,
+  "high": {
+   "n": 3,
+   "timely": 1.0
+  },
+  "low": {
+   "n": 305,
+   "timely": 0.538
+  }
+ },
+ "timely_diff_ci95": [
+  0.003,
+  0.033
+ ],
+ "fa_increase_per_day": 0.13,
+ "criterion_1_more_timely": true,
+ "criterion_2_fa_increase_at_most_0.5": true,
+ "confirmed": true
+}

@@ -261,8 +261,8 @@ def about_glucopulse_alerts() -> dict:
     _audit("about_glucopulse_alerts", _subject(), "ok")
     return {
         "what": "A trend alert on CGM data: the 15-minute slope projected 20 minutes ahead; 'heads_up' if it points "
-                "below 70 or above 250 mg/dL, 'loud' if glucose is already <= 100 or >= 200 and still heading out "
-                "on two readings in a row. Each tier is quiet for 30 minutes after it fires; the tool's `status` stays 'ongoing' "
+                "below 70 or above 250 mg/dL, 'loud' if glucose is already <= 100 or >= 200, or is moving at least 1.5 mg/dL per minute, "
+                "and still heading out on two readings in a row. Each tier is quiet for 30 minutes after it fires; the tool's `status` stays 'ongoing' "
                 "during that time while glucose is still heading out, and is 'low_now'/'high_now' when the latest "
                 "reading is already out of range. Results are about the next ~20 minutes only.",
         "tested_results": {
@@ -277,8 +277,10 @@ def about_glucopulse_alerts() -> dict:
                                                                                     "by a 15-minute version of the "
                                                                                     "alert; THIS tool needs 5-minute "
                                                                                     "readings",
-            "loud tier on the 73": "53% of lows warned >= 15 min ahead; ~2.1 alerts/day not followed by an event "
-                                   "(84% near-lows); missed its pre-set target of <= 1.5/day",
+            "loud tier on the 73": "54% of lows warned >= 15 min ahead; ~2.3 alerts/day not followed by an event "
+                                   "(mostly near-lows); misses the original pre-set target of <= 1.5/day. Includes "
+                                   "the fast-move escalation (tested 2026-11-17: +1.6 points timely, 95% CI +0.3 to "
+                                   "+3.3, for +0.13 alerts/day)",
         },
         "limits": [VALIDATED,
                    "An event means >= 15 minutes beyond 70 or 250 mg/dL; shorter dips are not counted.",
