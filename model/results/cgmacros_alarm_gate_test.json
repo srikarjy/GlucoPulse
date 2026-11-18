@@ -1,0 +1,104 @@
+{
+ "preregistration": "(written 2026-11-16 after the dev trials, before \"gate\" was run on any external person; run with\n--test):\n  Arms        alert20 vs gate, unchanged from dev. 5-min data: the 73 external people (BIG IDEAs + Hall; third use).\n              15-min data: ShanghaiT2DM non-insulin (second use), both arms translated as in shanghai.py (two-reading\n              slope), the gate on the current reading.\n  Primary     on the 73, both of: (1) fewer false alarms: 95% person-bootstrap interval of (alert20 - gate) false\n              alarms/day > 0; (2) timely share non-inferior: lower bound of (gate - alert20) > -0.10.\n  Secondary   lows and highs separately; ShanghaiT2DM with the same two criteria (highs reported separately).",
+ "external_73": {
+  "alert20": {
+   "events": 308,
+   "people_with_events": 51,
+   "days": 494.1,
+   "timely_share": 0.724,
+   "random_timely_share": 0.381,
+   "warned_at_all": 0.945,
+   "median_lead_min_if_warned": 25.0,
+   "false_alarms_per_day": 3.18,
+   "random_false_alarms_per_day": 7.27,
+   "high": {
+    "n": 3,
+    "timely": 1.0
+   },
+   "low": {
+    "n": 305,
+    "timely": 0.721
+   }
+  },
+  "gate": {
+   "events": 308,
+   "people_with_events": 51,
+   "days": 494.1,
+   "timely_share": 0.711,
+   "random_timely_share": 0.381,
+   "warned_at_all": 0.945,
+   "median_lead_min_if_warned": 25.0,
+   "false_alarms_per_day": 3.0,
+   "random_false_alarms_per_day": 6.81,
+   "high": {
+    "n": 3,
+    "timely": 1.0
+   },
+   "low": {
+    "n": 305,
+    "timely": 0.708
+   }
+  },
+  "gate_minus_alert20_timely_ci95": [
+   -0.033,
+   0.0
+  ],
+  "alert20_minus_gate_fa_per_day_ci95": [
+   0.14,
+   0.22
+  ],
+  "criterion_1_fewer_false_alarms": true,
+  "criterion_2_timely_noninferior": true
+ },
+ "shanghai_t2dm_15min": {
+  "alert20": {
+   "events": 332,
+   "people_with_events": 37,
+   "days": 547.6,
+   "timely_share": 0.883,
+   "random_timely_share": 0.161,
+   "warned_at_all": 0.883,
+   "median_lead_min_if_warned": 15.0,
+   "false_alarms_per_day": 1.13,
+   "random_false_alarms_per_day": 2.06,
+   "high": {
+    "n": 97,
+    "timely": 0.969
+   },
+   "low": {
+    "n": 235,
+    "timely": 0.847
+   }
+  },
+  "gate": {
+   "events": 332,
+   "people_with_events": 37,
+   "days": 547.6,
+   "timely_share": 0.883,
+   "random_timely_share": 0.159,
+   "warned_at_all": 0.883,
+   "median_lead_min_if_warned": 15.0,
+   "false_alarms_per_day": 1.1,
+   "random_false_alarms_per_day": 1.99,
+   "high": {
+    "n": 97,
+    "timely": 0.969
+   },
+   "low": {
+    "n": 235,
+    "timely": 0.847
+   }
+  },
+  "gate_minus_alert20_timely_ci95": [
+   0.0,
+   0.0
+  ],
+  "alert20_minus_gate_fa_per_day_ci95": [
+   0.01,
+   0.06
+  ],
+  "criterion_1_fewer_false_alarms": true,
+  "criterion_2_timely_noninferior": true
+ },
+ "confirmed": true
+}

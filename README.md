@@ -19,6 +19,8 @@ GlucoPulse moves continuous glucose monitor data from sensor to forecast reliabl
 | **Serving** | ONNX + INT8 model with a PyTorch fallback for short history. It runs standalone from a single model file, with no database or Kafka, on a free-tier container. |
 | **Interoperability** | FHIR R4 facade (`Observation`, `Patient`, `$forecast`, `Provenance`, `AuditEvent`), SMART-scoped JWT auth that fails closed, and a hash-chained audit log. Round-trip tested against HAPI FHIR 7.4.0. |
 | **Clinical AI agent** | Drafts cited findings from FHIR data. Any sentence without a matching citation is dropped, and every draft goes to a human reviewer. The agent has no permission to approve its own output. |
+| **Glucose alerts (tested)** | A two-tier CGM trend alert, pre-registered and tested on 45 CGMacros adults plus 115 people from three external studies: 72% of lows (external) and 97% of highs (ShanghaiT2DM) warned >= 15 min ahead. Served by `POST /alerts` (docs/TRIAGE.md §9, §15-19). |
+| **ChatGPT and Claude** | A public, read-only MCP server (`agents/public_mcp/`) so assistants can check a person's CGM readings. It is an OAuth resource server; errors never echo input; every answer says it is not for insulin dosing. See docs/AI_CONNECTORS.md. |
 
 ---
 
@@ -174,12 +176,14 @@ ehr/                       EHR <-> GlucoPulse FHIR round trip
 sources/                   Multi-source ingestion: Fitbit, Apple Health, CGMacros, any app via TOML mapping
                            -> typed records + FHIR, with a quarantine report (docs/SOURCES.md)
 agents/                    Clinical Reasoning Agent (MCP tools, citation grounding, quarantine)
+agents/public_mcp/         Public MCP server for ChatGPT / Claude: glucose alerts, OAuth resource server (docs/AI_CONNECTORS.md)
+api/                       Vercel entry point for agents/public_mcp (deploy via scripts/vercel_stage.sh)
 agents/triage/             Triage panel: 4 agents + moderator over what-if forecasts, grounded, rule floor (docs/TRIAGE.md)
 model/cgmacros/            CGMacros forecaster with meals as known-future inputs, ablation, what-if engine
 priorauth/                 Prior-authorization agent platform (see docs/priorauth/)
 hf_space/  hf_space_agent/ Hosted demos
 monitoring/grafana/        Dashboards
-docs/                      FHIR.md, HIPAA_MAPPING.md, CLINICAL_AGENT.md, SOURCES.md, TRIAGE.md, QUESTIONS.md
+docs/                      FHIR.md, HIPAA_MAPPING.md, CLINICAL_AGENT.md, SOURCES.md, TRIAGE.md, AI_CONNECTORS.md, QUESTIONS.md
 ```
 
 ---

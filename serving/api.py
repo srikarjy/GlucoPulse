@@ -312,15 +312,16 @@ def _check_quantile_order(q10: float, median: float, q90: float, horizon_label: 
 _healthcare_audit: Optional[AuditLogger] = None
 
 
-def _audit_predict(status: int, outcome: str, patient_id: str, req: Request, who) -> None:
+def _audit_predict(status: int, outcome: str, patient_id: str, req: Request, who,
+                   action: str = "predict", path: str = "/predict") -> None:
     if _healthcare_audit is None:
         return
     _healthcare_audit.record(
         actor=who.sub if who else "anonymous",
         client_id=who.client_id if who else None,
-        action="predict", resource_type="Observation", patient=patient_id,
+        action=action, resource_type="Observation", patient=patient_id,
         outcome=outcome, purpose_of_use="unspecified",
-        method="POST", path="/predict", status=status,
+        method="POST", path=path, status=status,
         request_id=req.headers.get("x-request-id") or str(uuid.uuid4()),
         source_ip=req.client.host if req.client else "",
     )
@@ -440,6 +441,46 @@ async def predict(request: InferenceRequest, req: Request,
     return response
 
 
+class AlertReading(BaseModel):
+    timestamp: str = Field(..., description="ISO timestamp, e.g. '2024-01-15T10:00:00Z'")
+    glucose_value: float = Field(..., ge=40, le=400, description="CGM glucose in mg/dL (sensor limits 40-400)")
+
+
+class AlertRequest(BaseModel):
+    """Recent CGM readings, oldest first, 5 min apart; send at least the last 20 min, ideally the last 2 h."""
+    patient_id: str
+    readings: list[AlertReading] = Field(..., min_length=4, max_length=288)
+
+
+@app.post("/alerts")
+async def alerts(request: AlertRequest, req: Request, authorization: Optional[str] = Header(default=None)):
+    """Two-tier trend alert at the latest reading (serving/alerts.py; tested in docs/TRIAGE.md sections 9, 15-18).
+    Stateless: the alert history is rebuilt from the readings sent, so send the same recent window each time."""
+    from serving.alerts import evaluate
+    who = None
+    if auth_enabled():
+        try:
+            who = authenticate(authorization)
+        except HTTPException as exc:
+            _audit_predict(exc.status_code, "denied", request.patient_id, req, None, "alerts", "/alerts")
+            raise
+    try:
+        times = [pd.Timestamp(r.timestamp) for r in request.readings]
+        times = [t.tz_localize("UTC") if t.tzinfo is None else t.tz_convert("UTC") for t in times]
+        if any(b <= a for a, b in zip(times, times[1:])):
+            raise HTTPException(422, detail="Readings must be in time order, oldest first, without duplicates.")
+        _check_not_stale(times[-1])
+        result = evaluate([(t.to_pydatetime(), r.glucose_value) for t, r in zip(times, request.readings)])
+        if result["continuous_readings"] < 4:
+            raise HTTPException(422, detail=("Cannot check: the latest readings are not a run of at least 4 readings "
+                                             "about 5 minutes apart. This is not an all-clear."))
+    except HTTPException as exc:
+        _audit_predict(exc.status_code, "error", request.patient_id, req, who, "alerts", "/alerts")
+        raise
+    _audit_predict(200, "success", request.patient_id, req, who, "alerts", "/alerts")
+    return {"patient_id": request.patient_id, "as_of": times[-1].isoformat(), **result}
+
+
 def _install_healthcare() -> None:
     """Mount the FHIR facade. Fully optional: the public demo image doesn't
     ship the healthcare package's DB/auth config, and /predict stays open
@@ -468,6 +509,7 @@ async def root():
         "endpoints": {
             "health": "/health",
             "predict": "/predict",
+            "alerts": "/alerts",
             "fhir": "/fhir/metadata",
             "docs": "/docs",
         },

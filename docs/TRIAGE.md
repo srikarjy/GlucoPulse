@@ -695,6 +695,160 @@ same 5-min grid:
 - **Combined with §9 and §15:** the trend alarm is the one warning method that has now held up on CGMacros (5 min) and
   on three external datasets: lows in BIG IDEAs and Hall, and highs and lows in ShanghaiT2DM.
 
+## 17. Fewer false alarms: simple rules barely move the trade-off
+
+`model/cgmacros/alarms.py`:
+- **Protocol:** committed before the first trial.
+- **Dev set:** all 45 CGMacros people. The rules have no fitted parameters, so nobody needs to be held out.
+- **Log:** 11 trials, including one crash (a bug on very short segments, fixed and rerun), in
+  `model/results/alarm_log.jsonl`.
+- **Target:** <= 1 false alarm a day while staying >= 60% timely.
+
+| CGMacros, 45 people | Timely | False alarms/day |
+|---|---|---|
+| alert20 (current) | .677 | 2.37 |
+| **gate** (high alarm only if glucose >= 200, low only if <= 100) | .637 | 1.88 |
+| 2 readings in a row | .511 | 1.68 |
+| wider margins (+10 / -5 mg/dL) | .561 | 1.66 |
+| 2 in a row + gate | .475 | 1.30 |
+| 2 in a row + gate + margins | .350 | 0.89 |
+| 3 in a row | .269 | 0.96 |
+| 2 in a row, projected 30 min | .628 | 3.24 |
+
+**Dev result: no variant met the target.**
+- Every rule built only from the glucose stream trades timeliness for false alarms at about the same rate.
+- Confirmation over consecutive readings is the costliest, because each extra reading delays the alarm 5 min.
+
+**Locked test of the best trade** (`gate`, pre-registered in `12fa05b`): confirmed, but small.
+
+| | Timely, alert20 -> gate | False alarms/day | Criteria |
+|---|---|---|---|
+| 73 external people (lows) | .724 -> .711 (diff CI [-.033, 0]) | 3.18 -> 3.00 (saved 0.18 [0.14, 0.22]) | both passed |
+| ShanghaiT2DM, 15 min (highs + lows) | .883 -> .883 | 1.13 -> 1.10 | both passed |
+
+- **Why the saving is small:** most of the gate's dev saving was on highs (CGMacros is high-heavy). The low gate (<= 100)
+  rarely binds, because lows almost always start from below 100.
+- **Decision:** the gate is a safe, tiny improvement, about 6-20% fewer false alarms depending on the population. The
+  false-alarm burden stays at about 2-3 a day.
+- **Next ideas:** getting to about 1 a day needs something other than stream rules, for example:
+  - per-person thresholds learned from the person's own first days;
+  - two alert tiers (a quiet "heads-up" and a loud alarm);
+  - pairing the alarm with the triage forecast. Note that §9's version of that pairing failed its false-alarm limit.
+
+## 18. Per-person thresholds and two alert tiers
+
+Both were run under a protocol committed before any trial, on CGMacros dev (`pers_*`, `tier_*` in `alarm_log.jsonl`;
+7 trials). Scoring was on post-calibration days for every arm.
+
+**Per-person thresholds: dropped on dev.**
+- How they worked: the alarm fires only if the current trend is at least as steep as the person's own 75th percentile
+  from their first 2 days.
+- They did not beat the trade-off: .599 timely at 1.98/day, against the gate's .637 at 1.88. Nothing to test.
+
+**What a "false" alarm really is** (descriptive, CGMacros). After alert20's false alarms:
+
+| What followed | Share |
+|---|---|
+| Near-high (220-250) | 25% |
+| Near-low (70-85) | 30% |
+| A large move | 14% |
+| Nothing much | 31% |
+
+For the strict tier, "nothing much" was 14%.
+
+**Two tiers, locked test** (pre-registered in `38a7c49`; the 73 external people's fourth use):
+- **Heads-up** = alert20.
+- **Loud** = gate + 2 readings in a row.
+
+| 73 external people | Timely | Random | False alarms/day | After a false alarm: near-low / nothing much |
+|---|---|---|---|---|
+| Heads-up (alert20) | .724 | .390 | 3.18 | 79% / 17% |
+| **Loud** | .526 | .264 | 2.13 | 84% / 11% |
+
+- **Pre-registered result: not confirmed.**
+  - The loud tier's timely share passed (.526 >= .40).
+  - Its false alarms did not: 2.13/day against the 1.5 limit.
+  - The limit was set from CGMacros dev, where the loud tier ran at 1.19/day.
+- **Why: these "false" alarms are mostly near-lows.**
+  - In these mostly normoglycemic people, glucose often dips to 70-85 without three readings below 70.
+  - 84% of the loud tier's false alarms were followed by such a dip.
+  - Only 11% (about 0.24/day) were followed by nothing much.
+- **ShanghaiT2DM** (15 min, loud = gate only): no change, 1.10/day and timely .883.
+- **Product implication:**
+  - Count only alarms followed by nothing much: about 0.5/day for heads-up and 0.24/day for loud on the external
+    people.
+  - Wording should say "glucose is heading toward low", not "low glucose".
+  - The strict event definition (3 readings below 70) labels a correct heads-up about a near-low as false. That is a
+    choice of definition, not a model error.
+
+## 19. In the app: `POST /alerts`
+
+`serving/alerts.py` (numpy only, because the serving image ships nothing from `model/`) and `POST /alerts` in
+`serving/api.py`:
+- **Request:** the patient's recent readings, oldest first, 5 min apart (at least 4; ideally the last 2 h).
+- **Response:** the alert at the latest reading (`heads_up`, `loud` or none), its direction, a plain-language reason
+  ("Glucose 98 mg/dL and falling; on this trend it would be about 74 mg/dL in 20 min"), the 20-min projection, the
+  alerts earlier in the window, and a disclaimer.
+- **Wording:** alerts say where glucose is heading, not that a low or high has happened. Most "false" alerts are
+  near-misses (§18).
+- **Same auth, audit trail and stale-data refusal as `/predict`.** Readings out of time order are rejected.
+- **Stateless:** the 30-min quiet period is rebuilt from the readings sent.
+
+The rules are the tested ones:
+- **heads-up** = alert20 (§9, §15, §16);
+- **loud** = level gate + 2 readings in a row (§17-18).
+
+`tests/model_cgmacros/test_serving_alerts.py` checks that the API copy fires exactly where the research code fires on
+CGMacros (every in-range reading of 15 people), plus synthetic streams and the endpoint itself.
+
+Not wired into the app (from §11-14):
+- The new forecaster stays research-only. The API's `/predict` still serves the original model.
+- Swapping it in needs a serving export of the boosted-tree + Chronos-2 blend, and Chronos-2 needs its own service.
+
+## 20. ChatGPT and Claude can use the alerts: a public MCP server
+
+`agents/public_mcp/` serves two read-only MCP tools, `get_glucose_alert` and `about_glucopulse_alerts`. Setup and the
+full threat model are in `docs/AI_CONNECTORS.md`.
+- **Auth:** it is an OAuth resource server for an external IdP, with protected-resource metadata and audience-bound
+  tokens. It is separate from the internal clinical-agent server, whose tokens are rejected.
+- **Safety in the tool contract:**
+  - stateless, with caller-supplied readings only;
+  - units are explicit;
+  - stale data is refused unless asked for as retrospective;
+  - "could not check" is an error, never a silent "no alert";
+  - error messages never echo input;
+  - every result carries the validated population and a not-for-dosing disclaimer.
+- **Bugs found while building it:**
+  - SDK validation errors quoted injected text back to the model, so all errors are now sanitized.
+  - Real CGM exports drift by seconds, which silently broke the 5-min history, so timestamps are now snapped to the
+    grid. This also fixes `/alerts`.
+  - Chunked oversized uploads crashed the size guard, so bodies are now checked before the handler.
+- **Tests:** 38 for this server, including an end-to-end MCP client call and offline checks of the production token
+  path.
+- **Still needed:** an IdP and a public HTTPS host before ChatGPT or claude.ai can connect.
+
+## 21. Fast falls reach the loud tier sooner
+
+A review of the MCP tool by a second Claude session found that the loud tier needs glucose already at or below 100
+(or at or above 200) on two readings in a row, so a fast fall from higher up got only a heads-up even with a deeper
+projection than a slow fall that was already loud. Protocol written before any trial (model/cgmacros/alarms.py,
+FAST-FALL ESCALATION PROTOCOL): loud = the existing rule OR, from any level, projection out of range and |15-min slope|
+>= 1.5 mg/dL/min on two readings in a row.
+
+| | timely (>= 15 min) | false alarms/day |
+|---|---|---|
+| Dev, 45 CGMacros: existing loud | .475 | 1.30 |
+| Dev: + projection < 55 / > 300 | .480 | 1.35 |
+| Dev: + fast move (chosen) | .511 | 1.67 |
+| Dev: both | .511 | 1.67 (tie; protocol had no tie-break, simpler arm taken) |
+| **Test, 73 external people: existing loud** | **.526** | **2.13** |
+| **Test: + fast move** | **.542** (gain 95% CI .003 to .033) | **2.26** (+0.13) |
+
+Both pre-registered criteria were met (gain lower bound > 0; at most +0.5 false alarms/day), so `serving/alerts.py`
+uses it (parity with the research code is tested). The gain is small. Because a rule needs two readings in a row, a
+2 mg/dL/min fall still becomes loud at about 90 rather than at 100; falls of 3 mg/dL/min or faster become loud a
+reading sooner. The 73 have been used five times now; the next change to the alarm needs new external data.
+
 ## Limits
 
 - Population: adults without insulin therapy; nothing here transfers to type 1 diabetes.

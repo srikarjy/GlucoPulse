@@ -1,5 +1,5 @@
 strands-agents==1.64.0
-mcp>=1.23,<2
+mcp>=1.30,<2  # public_mcp needs TokenVerifier subject + validate_token_resource
 fastapi==0.162.4
 uvicorn[standard]==0.54.0
 sqlalchemy==2.1.8
