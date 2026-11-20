@@ -1,0 +1,228 @@
+{
+ "model": {
+  "K_M": 464.0,
+  "AGR_ref": 65.1,
+  "lifespan_days": 105.0,
+  "anchor_154mgdl": 7.0
+ },
+ "step_simulation": [
+  {
+   "glucose_before": 180,
+   "glucose_after": 140.0,
+   "days_since_drop": 10,
+   "lab_a1c": 7.67,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 1.01
+  },
+  {
+   "glucose_before": 180,
+   "glucose_after": 140.0,
+   "days_since_drop": 30,
+   "lab_a1c": 7.46,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 0.8
+  },
+  {
+   "glucose_before": 180,
+   "glucose_after": 140.0,
+   "days_since_drop": 60,
+   "lab_a1c": 7.22,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 0.56
+  },
+  {
+   "glucose_before": 180,
+   "glucose_after": 140.0,
+   "days_since_drop": 90,
+   "lab_a1c": 7.04,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 0.38
+  },
+  {
+   "glucose_before": 180,
+   "glucose_after": 140.0,
+   "days_since_drop": 180,
+   "lab_a1c": 6.74,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 0.08
+  },
+  {
+   "glucose_before": 220,
+   "glucose_after": 140.0,
+   "days_since_drop": 10,
+   "lab_a1c": 8.63,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 1.97
+  },
+  {
+   "glucose_before": 220,
+   "glucose_after": 140.0,
+   "days_since_drop": 30,
+   "lab_a1c": 8.25,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 1.59
+  },
+  {
+   "glucose_before": 220,
+   "glucose_after": 140.0,
+   "days_since_drop": 60,
+   "lab_a1c": 7.8,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 1.14
+  },
+  {
+   "glucose_before": 220,
+   "glucose_after": 140.0,
+   "days_since_drop": 90,
+   "lab_a1c": 7.47,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 0.81
+  },
+  {
+   "glucose_before": 220,
+   "glucose_after": 140.0,
+   "days_since_drop": 180,
+   "lab_a1c": 6.91,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 0.25
+  },
+  {
+   "glucose_before": 260,
+   "glucose_after": 140.0,
+   "days_since_drop": 10,
+   "lab_a1c": 9.47,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 2.81
+  },
+  {
+   "glucose_before": 260,
+   "glucose_after": 140.0,
+   "days_since_drop": 30,
+   "lab_a1c": 8.93,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 2.27
+  },
+  {
+   "glucose_before": 260,
+   "glucose_after": 140.0,
+   "days_since_drop": 60,
+   "lab_a1c": 8.3,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 1.64
+  },
+  {
+   "glucose_before": 260,
+   "glucose_after": 140.0,
+   "days_since_drop": 90,
+   "lab_a1c": 7.84,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 1.18
+  },
+  {
+   "glucose_before": 260,
+   "glucose_after": 140.0,
+   "days_since_drop": 180,
+   "lab_a1c": 7.06,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 0.4
+  },
+  {
+   "glucose_before": 300,
+   "glucose_after": 140.0,
+   "days_since_drop": 10,
+   "lab_a1c": 10.21,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 3.55
+  },
+  {
+   "glucose_before": 300,
+   "glucose_after": 140.0,
+   "days_since_drop": 30,
+   "lab_a1c": 9.53,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 2.87
+  },
+  {
+   "glucose_before": 300,
+   "glucose_after": 140.0,
+   "days_since_drop": 60,
+   "lab_a1c": 8.75,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 2.09
+  },
+  {
+   "glucose_before": 300,
+   "glucose_after": 140.0,
+   "days_since_drop": 90,
+   "lab_a1c": 8.17,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 1.51
+  },
+  {
+   "glucose_before": 300,
+   "glucose_after": 140.0,
+   "days_since_drop": 180,
+   "lab_a1c": 7.19,
+   "gmi_on_cgm": 6.66,
+   "lab_minus_gmi": 0.53
+  }
+ ],
+ "steady_state_check": {
+  "cgmacros": {
+   "n": 45,
+   "kinetic_ref_agr": {
+    "mae": 0.5342520732422329,
+    "bias": 0.38849674757417824
+   },
+   "gmi": {
+    "mae": 0.6255741152806191,
+    "bias": 0.5480615924582425
+   },
+   "median_implied_minus_cgm_mean_mgdl": -11.499156447825342
+  },
+  "bigideas": {
+   "n": 16,
+   "kinetic_ref_agr": {
+    "mae": 0.32473209801716607,
+    "bias": -0.0993260131989071
+   },
+   "gmi": {
+    "mae": 0.36890859588895153,
+    "bias": 0.3166235674055099
+   },
+   "median_implied_minus_cgm_mean_mgdl": 3.303667645499708
+  },
+  "shanghai": {
+   "n": 84,
+   "kinetic_ref_agr": {
+    "mae": 2.489204338777174,
+    "bias": -2.441518643495079
+   },
+   "gmi": {
+    "mae": 2.355738548451539,
+    "bias": -2.276832334968089
+   },
+   "median_implied_minus_cgm_mean_mgdl": 58.6087934906085,
+   "by_a1c_tertile": [
+    {
+     "a1c_median": 6.6,
+     "n": 27,
+     "median_cgm_mean": 117,
+     "median_glucose_implied_by_lab_a1c": 142
+    },
+    {
+     "a1c_median": 8.2,
+     "n": 29,
+     "median_cgm_mean": 144,
+     "median_glucose_implied_by_lab_a1c": 195
+    },
+    {
+     "a1c_median": 11.8,
+     "n": 28,
+     "median_cgm_mean": 157,
+     "median_glucose_implied_by_lab_a1c": 366
+    }
+   ]
+  }
+ }
+}

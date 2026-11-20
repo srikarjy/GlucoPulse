@@ -849,6 +849,73 @@ uses it (parity with the research code is tested). The gain is small. Because a 
 2 mg/dL/min fall still becomes loud at about 90 rather than at 100; falls of 3 mg/dL/min or faster become loud a
 reading sooner. The 73 have been used five times now; the next change to the alarm needs new external data.
 
+## 22. Person-level glycemic state from days of data (negative result)
+
+Idea borrowed from Google's cuffless hypertension work (2026): judge a person's lasting state from data averaged over
+days, not one reading. Their waveform method is not replicated (no raw PPG/accelerometer in our development data).
+Protocol written before any feature met a label: `model/cgmacros/a1c.py`. Dev = 45 CGMacros (lab A1c); external =
+BIG IDEAs 16 + ShanghaiT2DM 84 (first recording per person, >= 5 days CGM).
+
+**Arm A, CGM over days -> HbA1c.** Baseline GMI = 3.31 + 0.02392 x mean glucose (Bergenstal 2018,
+doi:10.2337/dc18-1581).
+
+| MAE, A1c points | GMI | LIN (GMI recalibrated, chosen on dev) |
+|---|---|---|
+| Dev, 45 CGMacros (LOO) | .63 (bias +.55) | .45 (gain CI .05 to .31) |
+| **External, 100 pooled (primary)** | **2.04** | **2.44** (GMI - LIN CI -.46 to -.35: FAIL) |
+| BIG IDEAs 16 (secondary) | .37 | .34 |
+| ShanghaiT2DM 84 (secondary) | 2.36 (bias -2.28) | 2.84 |
+
+The pre-registered primary failed: the recalibrated formula is worse than GMI on the external people. Post hoc (not
+pre-registered): in Shanghai the GMI miss grows with A1c (bias -0.36 below 7.3 %, -1.44 at 7.3-9.7 %, -4.99 above
+9.7 %), the pattern GMI's own paper describes when glucose has recently been lowered, so the A1c reflects months of
+higher glucose than the CGM days show. LIN's steeper slope, learned on steady-state CGMacros people, makes that worse.
+Short CGM windows cannot recover an A1c set by the months before them.
+
+**Arm B, wearable heart rate alone -> A1c >= 5.7 (feasibility).** Dev LOO AUC: heart rate .48 (CI .30-.66), age + BMI +
+sex .78 (.60-.92), both .75; heart rate adds nothing (gain CI -.09 to +.02). It failed the pre-registered gate, so it
+was not run externally.
+
+Nothing ships: the alert tool is unchanged. Deviation logged in the module: the A1c unit guard was widened from 15 to
+20 % after it stopped on a real 15.4 % (144.8 mmol/mol) value, before any external prediction was scored.
+
+**Physiology check (post hoc, `model/cgmacros/a1c_kinetic.py`).** A red-cell kinetic model (Xu, Dunn, Ajjan 2021,
+doi:10.1177/1932296819897613; K_M 464 mg/dL, reference AGR 65.1 mL/g, lifespan 105 days; reconstructed and tested
+against the published worked numbers, doi:10.1111/dom.14763) has a time constant of about 100 days. Simulated: months
+at 260 mg/dL, then treatment brings glucose to 140; ten days later the lab A1c is still 9.5 % while GMI on those days
+reads 6.7 % (gap 2.8 points; 1.6 after 60 days, 0.4 after 180). In Shanghai's top A1c tertile (median 11.8 %) the lab
+A1c implies a steady glucose of about 366 mg/dL, but the CGM recorded a median of 157: the CGM days do not contain the
+glucose that set the A1c, so no estimator built on them can recover it (the kinetic model misses Shanghai as badly as
+GMI: MAE 2.49 vs 2.36). In the two populations without that history problem, the kinetic model with the
+no-diabetes reference AGR, fitted to nothing here, was closer than GMI (CGMacros MAE .53 vs .63; BIG IDEAs .32 vs .37,
+bias -.10 vs +.32). Seen after the fact on data already used, so this is a hypothesis for new data, not a result.
+
+## 23. Alarm round 3: Libre (15-min) data, and fewer loud alarms (not found)
+
+Protocol written before any trial: `model/cgmacros/alarms_r3.py`. Serving and the MCP tool now accept 15-minute
+readings (e.g. Libre history): when there is no 5-minute run they use a run of readings 13-17 min apart, exactly the
+rule tested on ShanghaiT2DM (parity with the research code is tested on all of ShanghaiT2DM).
+
+**B. Loud tier at 15 min.** Dev on CGMacros' own Libre Pro stream (45 people, 15-min readings recovered by
+`sources/cgmacros.py`). One arm (gate or fast move on one reading) turned out identical to the heads-up: at 15-min
+spacing a projection out of range from >= 100 already implies >= 1.5 mg/dL/min, a design flaw seen only in the dev run.
+The other (the same on two readings in a row) met the dev rule and was tested once on ShanghaiT2DM (42 non-insulin):
+
+| 15-min data, ShanghaiT2DM | timely (>= 15 min) | random baseline | false alarms/day |
+|---|---|---|---|
+| heads-up (shipped since §16) | .883 | .164 | 1.13 |
+| **loud, 2 readings in a row** | **.361** (gain CI .245-.365) | .058 | **0.37** |
+
+Confirmed, so it is served. It is a late confirmation (15 min after the heads-up), weaker than the 5-min loud tier;
+the tool tells people to act on the heads-up.
+
+**A. Fewer loud false alarms (5-min).** New external data: Jaeb CGMND (healthy adults, Dexcom; 107 adults, 869 days,
+433 low events, no highs), kept sealed for this. Arms on CGMacros dev against the shipped loud rule (.511 timely at
+1.67/day, reproduced exactly): projection 10 mg/dL past the line .345 at 0.92/day; three readings in a row .269 at
+0.95/day. Both cut ~0.7 alarms/day but lose far more than the allowed 0.03 timely, so none was eligible: the loud rule
+is unchanged and CGMND remains unused, available for a future attempt. Simple stateless filters trade warnings for
+quiet almost one for one; fewer false alarms needs more information than the trend (meals, time of day, history).
+
 ## Limits
 
 - Population: adults without insulin therapy; nothing here transfers to type 1 diabetes.

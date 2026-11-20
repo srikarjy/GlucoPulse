@@ -1,0 +1,2 @@
+{"at": "2026-11-18T20:09:30+00:00", "run": "dev", "chosen": "LIN", "arm_b_gate": false}
+{"at": "2026-11-18T20:10:40+00:00", "run": "external", "chosen": "LIN", "primary": {"gmi_minus_chosen_ci": [-0.4551744229981234, -0.3489462315263181], "pass": false}, "arm_b": "not run: HR model failed the dev gate (pre-registered)"}

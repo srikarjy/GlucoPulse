@@ -20,3 +20,10 @@
 {"trial": "esc_sev", "when": "2026-11-17T21:56:55+00:00", "note": "fast-fall escalation dev", "timely": 0.48, "random_timely": 0.197, "false_alarms_per_day": 1.35, "warned_at_all": 0.821, "median_lead": 15.0, "high": {"n": 176, "timely": 0.438}, "low": {"n": 47, "timely": 0.638}, "events": 223}
 {"trial": "esc_fast", "when": "2026-11-17T21:56:57+00:00", "note": "fast-fall escalation dev", "timely": 0.511, "random_timely": 0.217, "false_alarms_per_day": 1.67, "warned_at_all": 0.848, "median_lead": 15.0, "high": {"n": 176, "timely": 0.472}, "low": {"n": 47, "timely": 0.66}, "events": 223}
 {"trial": "esc_both", "when": "2026-11-17T21:56:58+00:00", "note": "fast-fall escalation dev", "timely": 0.511, "random_timely": 0.213, "false_alarms_per_day": 1.67, "warned_at_all": 0.848, "median_lead": 15.0, "high": {"n": 176, "timely": 0.472}, "low": {"n": 47, "timely": 0.66}, "events": 223}
+{"when": "2026-11-18T21:54:23+00:00", "trial": "r3_A_dev_BASE", "timely": 0.511, "fa_per_day": 1.67}
+{"when": "2026-11-18T21:54:23+00:00", "trial": "r3_A_dev_A1_depth", "timely": 0.345, "fa_per_day": 0.92}
+{"when": "2026-11-18T21:54:23+00:00", "trial": "r3_A_dev_A2_three", "timely": 0.269, "fa_per_day": 0.95}
+{"when": "2026-11-18T21:55:23+00:00", "trial": "r3_B_dev_HEADS15", "timely": 0.725, "fa_per_day": 1.94}
+{"when": "2026-11-18T21:55:23+00:00", "trial": "r3_B_dev_B1_one", "timely": 0.725, "fa_per_day": 1.94}
+{"when": "2026-11-18T21:55:23+00:00", "trial": "r3_B_dev_B2_two", "timely": 0.209, "fa_per_day": 0.59}
+{"when": "2026-11-18T21:55:50+00:00", "trial": "r3_B_test_B2_two", "confirmed": true, "ci": [0.245, 0.365]}

@@ -267,9 +267,20 @@ def test_cgm_export_drift_still_gives_a_trend(env):
     assert not err and out["continuous_readings_used"] >= 4 and out["earlier_alerts_in_window"]
 
 
-def test_fifteen_minute_data_is_refused_not_all_clear(env):
+def test_fifteen_minute_libre_data(env):
     s, c, _ = env
-    err, msg = call(c, issue_dev_token(s), "get_glucose_alert", {"readings": readings([150, 130, 110, 90, 80], step=15)})
+    err, out = call(c, issue_dev_token(s), "get_glucose_alert", {"readings": readings([150, 130, 110, 90], step=15)})
+    assert not err and out["reading_spacing_min"] == 15
+    assert out["status"] == "heads_up" and out["direction"] == "low"
+    assert any("15-minute readings" in n and "act on the heads-up" in n for n in out["notes"])
+    err, out = call(c, issue_dev_token(s), "get_glucose_alert", {"readings": readings([150, 130, 110, 90, 80], step=15)})
+    assert not err and out["status"] == "loud" and out["new_alarm_at_latest_reading"] == "loud"
+
+
+def test_gappy_data_is_refused_not_all_clear(env):
+    s, c, _ = env
+    rs = readings([150, 140, 130, 120], step=40)                         # neither a 5-min nor a 15-min run
+    err, msg = call(c, issue_dev_token(s), "get_glucose_alert", {"readings": rs})
     assert err and "NOT an all-clear" in msg
 
 
@@ -510,3 +521,61 @@ def test_warned_then_slower_fall_stays_ongoing(env):
 def test_no_contradictory_notes_when_already_low(env):
     out = _status(env, [90 - 5 * k for k in range(11)] + [39])
     assert not any("capped" in n for n in out["notes"]) and any("sensor's limit" in n for n in out["notes"])
+
+
+SETTINGS_ENV = ("GLUCOPULSE_MCP_AUTH_MODE", "GLUCOPULSE_MCP_RESOURCE", "GLUCOPULSE_MCP_ISSUER",
+                "GLUCOPULSE_MCP_JWKS_URL", "GLUCOPULSE_MCP_DEV_SECRET")
+
+
+@pytest.fixture
+def clean_env(monkeypatch):
+    for k in SETTINGS_ENV:
+        monkeypatch.delenv(k, raising=False)
+    return monkeypatch
+
+
+def test_settings_default_to_dev_mode_on_localhost(clean_env):
+    clean_env.setenv("GLUCOPULSE_MCP_DEV_SECRET", SECRET)
+    s = Settings.from_env()
+    assert (s.mode, s.resource, s.issuer, s.dev_secret) == ("dev", RESOURCE, DEV_ISSUER, SECRET)
+
+
+def test_settings_dev_mode_refuses_short_or_missing_secret(clean_env):
+    with pytest.raises(RuntimeError, match="DEV_SECRET"):
+        Settings.from_env()
+    clean_env.setenv("GLUCOPULSE_MCP_DEV_SECRET", "x" * 31)
+    with pytest.raises(RuntimeError, match="DEV_SECRET"):
+        Settings.from_env()
+
+
+def test_settings_jwks_mode(clean_env):
+    clean_env.setenv("GLUCOPULSE_MCP_AUTH_MODE", "jwks")
+    clean_env.setenv("GLUCOPULSE_MCP_RESOURCE", "https://mcp.example.org/mcp")
+    with pytest.raises(RuntimeError, match="ISSUER and GLUCOPULSE_MCP_JWKS_URL"):
+        Settings.from_env()
+    clean_env.setenv("GLUCOPULSE_MCP_ISSUER", "https://issuer.example.org/")
+    clean_env.setenv("GLUCOPULSE_MCP_JWKS_URL", "https://issuer.example.org/.well-known/jwks.json")
+    s = Settings.from_env()
+    assert (s.mode, s.issuer, s.jwks_url, s.dev_secret) == (
+        "jwks", "https://issuer.example.org/", "https://issuer.example.org/.well-known/jwks.json", None)
+    clean_env.setenv("GLUCOPULSE_MCP_RESOURCE", "http://mcp.example.org/mcp")     # plain http is refused
+    with pytest.raises(RuntimeError, match="https://"):
+        Settings.from_env()
+
+
+def test_settings_unknown_mode_refused(clean_env):
+    clean_env.setenv("GLUCOPULSE_MCP_AUTH_MODE", "none")
+    with pytest.raises(RuntimeError, match="unknown GLUCOPULSE_MCP_AUTH_MODE"):
+        Settings.from_env()
+
+
+def test_dev_tokens_refused_outside_dev_mode():
+    s = Settings("jwks", "https://mcp.example.org/mcp", "https://issuer.example.org/", jwks_url="https://x/jwks")
+    with pytest.raises(RuntimeError, match="only exist in dev mode"):
+        issue_dev_token(s)
+
+
+def test_dev_token_lifetime_capped():
+    s = Settings("dev", RESOURCE, DEV_ISSUER, dev_secret=SECRET)
+    claims = jwt.decode(issue_dev_token(s, ttl=10 ** 9), SECRET, algorithms=["HS256"], audience=RESOURCE)
+    assert claims["exp"] - claims["iat"] == 12 * 3600 and claims["scope"] == SCOPE
