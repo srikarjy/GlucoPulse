@@ -21,3 +21,6 @@ data/hall2018/
 data/shanghai/
 data/cgmnd/
 logs/
+.coverage
+.codex/
+video/
