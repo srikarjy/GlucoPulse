@@ -890,6 +890,32 @@ GMI: MAE 2.49 vs 2.36). In the two populations without that history problem, the
 no-diabetes reference AGR, fitted to nothing here, was closer than GMI (CGMacros MAE .53 vs .63; BIG IDEAs .32 vs .37,
 bias -.10 vs +.32). Seen after the fact on data already used, so this is a hypothesis for new data, not a result.
 
+## 23. Alarm round 3: Libre (15-min) data, and fewer loud alarms (not found)
+
+Protocol written before any trial: `model/cgmacros/alarms_r3.py`. Serving and the MCP tool now accept 15-minute
+readings (e.g. Libre history): when there is no 5-minute run they use a run of readings 13-17 min apart, exactly the
+rule tested on ShanghaiT2DM (parity with the research code is tested on all of ShanghaiT2DM).
+
+**B. Loud tier at 15 min.** Dev on CGMacros' own Libre Pro stream (45 people, 15-min readings recovered by
+`sources/cgmacros.py`). One arm (gate or fast move on one reading) turned out identical to the heads-up: at 15-min
+spacing a projection out of range from >= 100 already implies >= 1.5 mg/dL/min, a design flaw seen only in the dev run.
+The other (the same on two readings in a row) met the dev rule and was tested once on ShanghaiT2DM (42 non-insulin):
+
+| 15-min data, ShanghaiT2DM | timely (>= 15 min) | random baseline | false alarms/day |
+|---|---|---|---|
+| heads-up (shipped since §16) | .883 | .164 | 1.13 |
+| **loud, 2 readings in a row** | **.361** (gain CI .245-.365) | .058 | **0.37** |
+
+Confirmed, so it is served. It is a late confirmation (15 min after the heads-up), weaker than the 5-min loud tier;
+the tool tells people to act on the heads-up.
+
+**A. Fewer loud false alarms (5-min).** New external data: Jaeb CGMND (healthy adults, Dexcom; 107 adults, 869 days,
+433 low events, no highs), kept sealed for this. Arms on CGMacros dev against the shipped loud rule (.511 timely at
+1.67/day, reproduced exactly): projection 10 mg/dL past the line .345 at 0.92/day; three readings in a row .269 at
+0.95/day. Both cut ~0.7 alarms/day but lose far more than the allowed 0.03 timely, so none was eligible: the loud rule
+is unchanged and CGMND remains unused, available for a future attempt. Simple stateless filters trade warnings for
+quiet almost one for one; fewer false alarms needs more information than the trend (meals, time of day, history).
+
 ## Limits
 
 - Population: adults without insulin therapy; nothing here transfers to type 1 diabetes.

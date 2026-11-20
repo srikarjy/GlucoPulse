@@ -153,3 +153,37 @@ def parse_hall2018(path: str | Path) -> dict[str, AdapterResult]:
                                            source="hall2018", device="dexcom-g4", raw_ref=f"{path.name}:{k}"))
         out[patient] = res
     return out
+
+
+def parse_cgmnd(root: str | Path, min_age: int = 18) -> dict[str, AdapterResult]:
+    """Jaeb Center "Glucose Sensor Profiles in Healthy Non-Diabetic Subjects" (CGMND, 2017; Shah et al., J Clin
+    Endocrinol Metab 2019, doi:10.1210/jc.2018-02763; public.jaeb.org/datasets/diabetes, CGMND.zip). Blinded 5-min CGM.
+    Only CGM rows (calibration rows skipped) of participants aged >= min_age at enrolment, from NonDiabPtRoster.csv.
+    Times are relative (days from enrolment + clock time), so each person's day 0 is anchored to 2017-01-01: hour of day
+    is real, the calendar date is not. Values 39 and 401 are the sensor's LOW/HIGH codes and become 40 / 400.
+    Keyed cgmnd-NNN by sorted PtID (the source ids are not kept)."""
+    from datetime import timedelta
+    root = Path(root)
+    with (root / "NonDiabPtRoster.csv").open(newline="", encoding="utf-8-sig") as fh:
+        adults = {r["PtID"].strip() for r in csv.DictReader(fh)
+                  if (r.get("AgeAsOfEnrollDt") or "").strip().isdigit() and int(r["AgeAsOfEnrollDt"]) >= min_age}
+    rows: dict[str, list[tuple[int, dict]]] = {}
+    with (root / "NonDiabDeviceCGM.csv").open(newline="", encoding="utf-8-sig") as fh:
+        for k, row in enumerate(csv.DictReader(fh), start=2):
+            pt = row["PtID"].strip()
+            if pt in adults and row["RecordType"].strip() == "CGM":
+                rows.setdefault(pt, []).append((k, row))
+    base = datetime(2017, 1, 1)
+    out = {}
+    for n, pt in enumerate(sorted(rows, key=int), start=1):
+        patient = checked_patient(f"cgmnd-{n:03d}")
+        res = AdapterResult()
+        for k, row in rows[pt]:
+            v = float(row["Value"])
+            v = 40.0 if v <= 39 else 400.0 if v >= 401 else v
+            hh, mm, ss = (int(p) for p in row["DeviceTm"].split(":"))
+            ts = base + timedelta(days=int(row["DeviceDtDaysFromEnroll"]), hours=hh, minutes=mm, seconds=ss)
+            res.raws.append(RawMeasurement(patient=patient, kind=Kind.GLUCOSE_CGM, ts=ts, value=str(v), unit="mg/dL",
+                                           source="cgmnd", device="dexcom-g6", raw_ref=f"NonDiabDeviceCGM.csv:{k}"))
+        out[patient] = res
+    return out

@@ -89,7 +89,7 @@ def _subject() -> str:
 
 def _validate(readings: list[Reading], unit: str) -> list[tuple[datetime, float]]:
     if not 4 <= len(readings) <= 288:
-        raise ToolError("send between 4 and 288 readings (20 min to 24 h at 5-min spacing), oldest first")
+        raise ToolError("send between 4 and 288 readings (e.g. the last 2 h at 5-min or 15-min spacing), oldest first")
     out = []
     for i, r in enumerate(readings, 1):
         if r.timestamp.tzinfo is None:
@@ -100,7 +100,8 @@ def _validate(readings: list[Reading], unit: str) -> list[tuple[datetime, float]
     if len(dedup) < len(out):
         out = dedup
         if len(out) < 4:
-            raise ToolError("send between 4 and 288 different readings (20 min to 24 h at 5-min spacing), oldest first")
+            raise ToolError("send between 4 and 288 different readings (e.g. the last 2 h at 5-min or 15-min "
+                            "spacing), oldest first")
     for i, (a, b) in enumerate(zip(out, out[1:]), 1):
         if b[0] == a[0]:
             raise ToolError(f"readings {i} and {i + 1} have the same time but different values; send each time once")
@@ -144,7 +145,8 @@ def _sentence(status: str, now: str, proj: str, direction: str | None, very_low:
 def get_glucose_alert(readings: list[Reading], unit: Literal["mg/dL", "mmol/L"] = "mg/dL",
                       mode: Literal["current", "retrospective"] = "current") -> dict:
     """Check recent CGM readings for a coming low (< 70 mg/dL) or high (> 250 mg/dL) using GlucoPulse's tested trend
-    alert. Send the person's readings, oldest first, ideally 5 min apart and covering the last 1-2 hours.
+    alert. Send the person's readings, oldest first, ideally 5 min apart and covering the last 1-2 hours. 15-minute
+    readings (e.g. Libre history) also work; their loud tier is a later, weaker confirmation (see the about tool).
 
     Read `status` (never empty) and pass on `say_to_person`:
       "low_now" / "high_now"  the latest reading is already below 70 or above 250 mg/dL;
@@ -173,10 +175,9 @@ def get_glucose_alert(readings: list[Reading], unit: Literal["mg/dL", "mmol/L"] 
             raise ToolError("the latest reading is more than 15 minutes old, so this cannot be a current alert; "
                             "call again with mode='retrospective' to review past data")
         res = evaluate([(t, min(max(g, 40.0), 400.0)) for t, g in series])   # sensor range, as tested
-        if res["continuous_readings"] < 4:
-            raise ToolError("cannot check: the latest readings are not a run of at least 4 readings about 5 minutes "
-                            "apart (20 minutes). 15-minute data (e.g. Libre history) or gaps cannot be used; this is "
-                            "NOT an all-clear")
+        if not res["enough"]:
+            raise ToolError("cannot check: the latest readings are not a run of at least 4 readings 5 minutes apart "
+                            "or 2 readings 15 minutes apart (gaps break the run); this is NOT an all-clear")
     except ToolError as e:
         _audit("get_glucose_alert", subject, "rejected", n_readings=len(readings), reason=str(e)[:60])
         raise
@@ -188,7 +189,7 @@ def get_glucose_alert(readings: list[Reading], unit: Literal["mg/dL", "mmol/L"] 
     trend = (proj_raw - res["current_glucose"]) / 20.0                    # mg/dL per minute (15-min LS slope)
     proj = min(max(proj_raw, 40.0), 400.0)                                # CGM sensors report 40-400 mg/dL
     proj_txt = ("below " + fmt(40.0)) if proj_raw < 40 else ("above " + fmt(400.0)) if proj_raw > 400 else fmt(proj)
-    last_t = snap(series)[-1][0]
+    last_t = snap(series)[-1][0] if res["spacing_min"] == 5 else series[-1][0]   # 15-min runs are not snapped
     fired_now = res["alert"]
     events = res["alerts_in_window"]
     earlier = events[:-1] if fired_now else events
@@ -239,6 +240,10 @@ def get_glucose_alert(readings: list[Reading], unit: Literal["mg/dL", "mmol/L"] 
                "and the 20 minutes below count from that reading.) " + say)
     if out_now:
         notes.append("Glucose is already out of range, so no projection is given.")
+    if res["spacing_min"] == 15:
+        notes.append("15-minute readings: the trend comes from the last 15-minute step, as tested on ShanghaiT2DM. "
+                     "At this spacing 'loud' needs two readings in a row, so it comes 15 minutes after the heads-up "
+                     "and catches fewer events; act on the heads-up.")
     out = {"status": status, "direction": direction, "say_to_person": say,
            "mode": mode, "unit": unit,
            "current_glucose": round(raw_now / k, 1), "projected_20min": None if out_now else round(proj / k, 1),
@@ -246,7 +251,7 @@ def get_glucose_alert(readings: list[Reading], unit: Literal["mg/dL", "mmol/L"] 
            "current_glucose_mg_dl": round(raw_now, 1), "projected_20min_mg_dl": None if out_now else round(proj, 1), "latest_reading_minutes_ago": age,
            "trend_mg_dl_per_min": round(trend, 2),
            "new_alarm_at_latest_reading": fired_now,
-           "continuous_readings_used": res["continuous_readings"],
+           "continuous_readings_used": res["continuous_readings"], "reading_spacing_min": res["spacing_min"],
            "earlier_alerts_in_window": [{"time": a["timestamp"], "tier": a["tier"], "direction": a["direction"]}
                                         for a in earlier][-10:],
            "notes": notes, "validated_population": VALIDATED, "disclaimer": DISCLAIMER}
@@ -264,7 +269,8 @@ def about_glucopulse_alerts() -> dict:
                 "below 70 or above 250 mg/dL, 'loud' if glucose is already <= 100 or >= 200, or is moving at least 1.5 mg/dL per minute, "
                 "and still heading out on two readings in a row. Each tier is quiet for 30 minutes after it fires; the tool's `status` stays 'ongoing' "
                 "during that time while glucose is still heading out, and is 'low_now'/'high_now' when the latest "
-                "reading is already out of range. Results are about the next ~20 minutes only.",
+                "reading is already out of range. Results are about the next ~20 minutes only. 15-minute readings "
+                "(e.g. Libre history) use the slope of the last 15-minute step; their loud tier needs two readings in a row.",
         "tested_results": {
             "CGMacros (45 adults, 5-min CGM)": "68% of lows/highs warned >= 15 min ahead; ~2.4 alerts/day not "
                                                "followed by an event",
@@ -275,8 +281,15 @@ def about_glucopulse_alerts() -> dict:
             "ShanghaiT2DM (42 adults with type 2 diabetes, no insulin, 15-min CGM)": "97% of highs and 85% of lows "
                                                                                     "warned, usually 15 min ahead, "
                                                                                     "by a 15-minute version of the "
-                                                                                    "alert; THIS tool needs 5-minute "
-                                                                                    "readings",
+                                                                                    "alert, which this tool uses for "
+                                                                                    "15-minute readings (~1.1 "
+                                                                                    "alerts/day not followed by an "
+                                                                                    "event)",
+            "loud tier at 15-min spacing (ShanghaiT2DM, tested 2026-11-18)": "36% of events warned >= 15 min ahead "
+                                                                            "(random baseline 6%); ~0.4 alerts/day "
+                                                                            "not followed by an event; it needs two "
+                                                                            "15-min readings, so it is a late "
+                                                                            "confirmation of the heads-up",
             "loud tier on the 73": "54% of lows warned >= 15 min ahead; ~2.3 alerts/day not followed by an event "
                                    "(mostly near-lows); misses the original pre-set target of <= 1.5/day. Includes "
                                    "the fast-move escalation (tested 2026-11-17: +1.6 points timely, 95% CI +0.3 to "

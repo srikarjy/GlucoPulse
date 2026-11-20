@@ -1,0 +1,48 @@
+{
+ "preregistration": "model/cgmacros/alarms_r3.py, B",
+ "arm": "B2_two",
+ "people": 42,
+ "HEADS15": {
+  "events": 332,
+  "people_with_events": 37,
+  "days": 547.6,
+  "timely_share": 0.883,
+  "random_timely_share": 0.164,
+  "warned_at_all": 0.883,
+  "median_lead_min_if_warned": 15.0,
+  "false_alarms_per_day": 1.13,
+  "random_false_alarms_per_day": 2.09,
+  "high": {
+   "n": 97,
+   "timely": 0.969
+  },
+  "low": {
+   "n": 235,
+   "timely": 0.847
+  }
+ },
+ "B2_two": {
+  "events": 332,
+  "people_with_events": 37,
+  "days": 547.6,
+  "timely_share": 0.361,
+  "random_timely_share": 0.058,
+  "warned_at_all": 0.361,
+  "median_lead_min_if_warned": 15.0,
+  "false_alarms_per_day": 0.37,
+  "random_false_alarms_per_day": 0.62,
+  "high": {
+   "n": 97,
+   "timely": 0.371
+  },
+  "low": {
+   "n": 235,
+   "timely": 0.357
+  }
+ },
+ "timely_minus_random_ci95": [
+  0.245,
+  0.365
+ ],
+ "confirmed": true
+}

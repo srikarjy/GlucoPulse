@@ -267,9 +267,20 @@ def test_cgm_export_drift_still_gives_a_trend(env):
     assert not err and out["continuous_readings_used"] >= 4 and out["earlier_alerts_in_window"]
 
 
-def test_fifteen_minute_data_is_refused_not_all_clear(env):
+def test_fifteen_minute_libre_data(env):
     s, c, _ = env
-    err, msg = call(c, issue_dev_token(s), "get_glucose_alert", {"readings": readings([150, 130, 110, 90, 80], step=15)})
+    err, out = call(c, issue_dev_token(s), "get_glucose_alert", {"readings": readings([150, 130, 110, 90], step=15)})
+    assert not err and out["reading_spacing_min"] == 15
+    assert out["status"] == "heads_up" and out["direction"] == "low"
+    assert any("15-minute readings" in n and "act on the heads-up" in n for n in out["notes"])
+    err, out = call(c, issue_dev_token(s), "get_glucose_alert", {"readings": readings([150, 130, 110, 90, 80], step=15)})
+    assert not err and out["status"] == "loud" and out["new_alarm_at_latest_reading"] == "loud"
+
+
+def test_gappy_data_is_refused_not_all_clear(env):
+    s, c, _ = env
+    rs = readings([150, 140, 130, 120], step=40)                         # neither a 5-min nor a 15-min run
+    err, msg = call(c, issue_dev_token(s), "get_glucose_alert", {"readings": rs})
     assert err and "NOT an all-clear" in msg
 
 
