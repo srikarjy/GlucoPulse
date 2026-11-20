@@ -127,6 +127,30 @@ cd /tmp/glucopulse-mcp-deploy && vercel deploy --prod
    - Make Auth0 accept the OAuth `resource` parameter as the audience. MCP clients send `resource`, not `audience`.
    - Promote a login connection to domain level, so dynamically registered clients can use it.
 3. Give the users who should have access the `glucose:alerts` permission.
+4. Authorize self-registered clients for the API. Auth0 treats every dynamically registered client (`tpc_...` ids) as
+   a third-party application, and a third-party client needs a client grant even when the API's user access policy
+   is "allow all". Without one, `/authorize` shows Auth0's generic error page; the underlying error is
+   `invalid_request: Client "tpc_..." is not authorized to access resource server "<resource>"`. One default grant
+   covers every client that registers later:
+   ```bash
+   auth0 api post client-grants --data '{"default_for":"third_party_clients",
+     "audience":"https://<project>.vercel.app/mcp","scope":["glucose:alerts"],"subject_type":"user"}'
+   ```
+   (Dashboard: the API's Settings, "Default Permissions for third-party applications".)
+
+### Tested with a real identity provider (2026-11-19, Claude Code, synthetic readings)
+
+Claude Code connected to the Vercel deployment as an HTTP MCP server with no token
+(`claude mcp add --transport http glucopulse-live https://<project>.vercel.app/mcp`), registered itself with Auth0,
+and completed login and consent for `glucose:alerts`. The first attempt failed at `/authorize` with the third-party
+error above; step 4 fixed it. With the issued token:
+
+- `about_glucopulse_alerts` returned the tested numbers and limits.
+- `get_glucose_alert` (`retrospective`, a synthetic fall from 128 to 84 mg/dL over 30 min) returned `ongoing` / low,
+  projection 53.2 mg/dL, trend -1.54 mg/dL/min, earlier `heads_up` and `loud` alerts, labelled "Past data, NOT current".
+- A request with no token got `401` with `resource_metadata` pointing at `/.well-known/oauth-protected-resource/mcp`.
+
+Not yet run against the real IdP: ChatGPT, claude.ai (web) and Claude Desktop as remote connectors.
 
 ## 3. Security and safety controls
 
@@ -150,8 +174,8 @@ from a real MCP client over HTTP and the production token path with a generated 
 
 ## 4. Not done yet
 
-- **Production auth is tested offline only** (generated RSA key). It has not run against a real IdP.
-- **No real ChatGPT or claude.ai connection yet:** it needs a public HTTPS host.
+- **Real IdP tested with one client only:** Claude Code through Auth0 on Vercel (section 2, 2026-11-19). ChatGPT,
+  claude.ai and Claude Desktop have not connected to the hosted server yet.
 - **Before any real-patient use:** a data-protection review (the audit log is metadata only, but readings pass through
   the assistant provider) and a clinical review of the alert wording.
 - **Rate limits are per process,** in memory, which means per function instance on Vercel. Before real traffic, move
