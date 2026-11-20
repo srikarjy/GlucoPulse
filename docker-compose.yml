@@ -94,6 +94,7 @@ services:
         condition: service_healthy
     volumes:
       - "./data/azt1d/extracted/AZT1D 2025/CGM Records:/data:ro"
+      - "./data/stream:/stream:ro"            # CGMacros exports: --source csv --data-dir /stream
 
   consumer:
     build: ./consumer
