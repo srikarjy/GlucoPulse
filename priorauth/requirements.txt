@@ -1,17 +1,17 @@
-strands-agents==1.64.0
+strands-agents==1.65.0
 mcp>=1.30,<2  # public_mcp needs TokenVerifier subject + validate_token_resource
-fastapi==0.162.4
+fastapi==0.163.2
 uvicorn[standard]==0.54.0
-sqlalchemy==2.1.8
-psycopg[binary]==3.3.8
+sqlalchemy==2.1.9
+psycopg[binary]==3.3.9
 pgvector==0.5.1
 pydantic==2.14.3
 pyjwt==2.15.1
 httpx==0.28.1
-numpy==2.5.4
+numpy==2.5.5
 prometheus-client==0.26.0
 opentelemetry-api==1.45.2
 opentelemetry-sdk==1.45.2
 opentelemetry-exporter-otlp-proto-http==1.45.2
-boto3==1.44.0
-opensearch-py>=2.7
+boto3==1.44.5
+opensearch-py>=3.2.0

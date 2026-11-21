@@ -447,7 +447,8 @@ class AlertReading(BaseModel):
 
 
 class AlertRequest(BaseModel):
-    """Recent CGM readings, oldest first, 5 min apart; send at least the last 20 min, ideally the last 2 h."""
+    """Recent CGM readings, oldest first, 5 min apart (or 15 min, e.g. Libre history: heads-up tier only); send at
+    least the last 20 min (30 min at 15-min spacing), ideally the last 2 h."""
     patient_id: str
     readings: list[AlertReading] = Field(..., min_length=4, max_length=288)
 
@@ -471,9 +472,10 @@ async def alerts(request: AlertRequest, req: Request, authorization: Optional[st
             raise HTTPException(422, detail="Readings must be in time order, oldest first, without duplicates.")
         _check_not_stale(times[-1])
         result = evaluate([(t.to_pydatetime(), r.glucose_value) for t, r in zip(times, request.readings)])
-        if result["continuous_readings"] < 4:
+        if not result["enough"]:
             raise HTTPException(422, detail=("Cannot check: the latest readings are not a run of at least 4 readings "
-                                             "about 5 minutes apart. This is not an all-clear."))
+                                             "5 minutes apart or 2 readings 15 minutes apart. This is not an "
+                                             "all-clear."))
     except HTTPException as exc:
         _audit_predict(exc.status_code, "error", request.patient_id, req, who, "alerts", "/alerts")
         raise
