@@ -1,0 +1,73 @@
+{
+ "dev": {
+  "HEADS15": {
+   "events": 574,
+   "people_with_events": 42,
+   "days": 476.9,
+   "timely_share": 0.725,
+   "random_timely_share": 0.195,
+   "warned_at_all": 0.725,
+   "median_lead_min_if_warned": 15.0,
+   "false_alarms_per_day": 1.94,
+   "random_false_alarms_per_day": 3.07,
+   "high": {
+    "n": 81,
+    "timely": 0.889
+   },
+   "low": {
+    "n": 493,
+    "timely": 0.698
+   }
+  },
+  "B1_one": {
+   "events": 574,
+   "people_with_events": 42,
+   "days": 476.9,
+   "timely_share": 0.725,
+   "random_timely_share": 0.188,
+   "warned_at_all": 0.725,
+   "median_lead_min_if_warned": 15.0,
+   "false_alarms_per_day": 1.94,
+   "random_false_alarms_per_day": 3.07,
+   "high": {
+    "n": 81,
+    "timely": 0.889
+   },
+   "low": {
+    "n": 493,
+    "timely": 0.698
+   },
+   "timely_minus_random_ci95": [
+    0.479,
+    0.615
+   ]
+  },
+  "B2_two": {
+   "events": 574,
+   "people_with_events": 42,
+   "days": 476.9,
+   "timely_share": 0.209,
+   "random_timely_share": 0.054,
+   "warned_at_all": 0.209,
+   "median_lead_min_if_warned": 15.0,
+   "false_alarms_per_day": 0.59,
+   "random_false_alarms_per_day": 0.84,
+   "high": {
+    "n": 81,
+    "timely": 0.259
+   },
+   "low": {
+    "n": 493,
+    "timely": 0.201
+   },
+   "timely_minus_random_ci95": [
+    0.117,
+    0.205
+   ]
+  }
+ },
+ "eligible": [
+  "B2_two"
+ ],
+ "would_choose": "B2_two"
+}

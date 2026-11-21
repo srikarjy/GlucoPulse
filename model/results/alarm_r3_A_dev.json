@@ -1,0 +1,63 @@
+{
+ "dev": {
+  "BASE": {
+   "events": 223,
+   "people_with_events": 33,
+   "days": 439.2,
+   "timely_share": 0.511,
+   "random_timely_share": 0.21,
+   "warned_at_all": 0.848,
+   "median_lead_min_if_warned": 15.0,
+   "false_alarms_per_day": 1.67,
+   "random_false_alarms_per_day": 3.82,
+   "high": {
+    "n": 176,
+    "timely": 0.472
+   },
+   "low": {
+    "n": 47,
+    "timely": 0.66
+   }
+  },
+  "A1_depth": {
+   "events": 223,
+   "people_with_events": 33,
+   "days": 439.2,
+   "timely_share": 0.345,
+   "random_timely_share": 0.111,
+   "warned_at_all": 0.641,
+   "median_lead_min_if_warned": 15.0,
+   "false_alarms_per_day": 0.92,
+   "random_false_alarms_per_day": 2.04,
+   "high": {
+    "n": 176,
+    "timely": 0.33
+   },
+   "low": {
+    "n": 47,
+    "timely": 0.404
+   }
+  },
+  "A2_three": {
+   "events": 223,
+   "people_with_events": 33,
+   "days": 439.2,
+   "timely_share": 0.269,
+   "random_timely_share": 0.119,
+   "warned_at_all": 0.556,
+   "median_lead_min_if_warned": 10.0,
+   "false_alarms_per_day": 0.95,
+   "random_false_alarms_per_day": 2.03,
+   "high": {
+    "n": 176,
+    "timely": 0.21
+   },
+   "low": {
+    "n": 47,
+    "timely": 0.489
+   }
+  }
+ },
+ "eligible": [],
+ "would_choose": null
+}

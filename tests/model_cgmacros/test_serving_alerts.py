@@ -84,13 +84,55 @@ def test_api_endpoint(monkeypatch):
     assert bad.status_code == 422
 
 
-def test_export_drift_snapped_and_15min_gives_no_trend():
+def test_export_drift_snapped():
     drift = [(T0 + timedelta(minutes=5 * i, seconds=(31 if i % 2 else 32)), v)
              for i, v in enumerate([130 - 4 * k for k in range(14)])]
-    assert evaluate(drift)["continuous_readings"] == 14
-    fifteen = series([150, 130, 110, 90, 80])
-    fifteen = [(T0 + timedelta(minutes=15 * i), v) for i, (_, v) in enumerate(fifteen)]
-    assert evaluate(fifteen)["continuous_readings"] == 1
+    r = evaluate(drift)
+    assert r["continuous_readings"] == 14 and r["spacing_min"] == 5 and r["enough"]
+
+
+def fifteen(values, start=T0, drift_s=0):
+    return [(start + timedelta(minutes=15 * i, seconds=drift_s * i), float(v)) for i, v in enumerate(values)]
+
+
+def test_fifteen_minute_data_heads_up_then_loud_on_second_reading():
+    r = evaluate(fifteen([150, 130, 110, 90, 80], drift_s=40))          # Libre timestamps drift; 13-17 min is a run
+    assert r["spacing_min"] == 15 and r["enough"] and r["continuous_readings"] == 5
+    tiers = [(a["tier"], a["glucose"]) for a in r["alerts_in_window"]]
+    assert tiers == [("heads_up", 90.0), ("loud", 80.0)]                # loud needs the condition on 2 readings
+    one = evaluate(fifteen([150, 130, 110, 90]))
+    assert one["alert"] == "heads_up"                                   # one reading: heads-up only
+
+
+def test_fifteen_minute_gap_breaks_the_run():
+    pts = fifteen([150, 130]) + [(T0 + timedelta(minutes=70), 110.0)]   # 40-min gap before the last reading
+    r = evaluate(pts)
+    assert not r["enough"] and r["projected_20min"] is None
+
+
+def test_five_minute_run_preferred_over_fifteen():
+    r = evaluate(series([130 - 4 * k for k in range(14)]))
+    assert r["spacing_min"] == 5 and r["loud_tier_validated"]
+
+
+def test_parity_15min_with_research_rule_on_shanghai():
+    pytest.importorskip("pandas")
+    pytest.importorskip("openpyxl")
+    from model.cgmacros import shanghai as S
+    from model.cgmacros.alarms_r3 import B_ARMS
+    from serving.alerts import flags15, segment_tail15
+    if not S.RAW.exists():
+        pytest.skip("ShanghaiT2DM not downloaded here")
+    n = 0
+    for _, f in S.frames():
+        x = f["glucose"].to_numpy(float)
+        pts = list(zip(f["ts"].dt.to_pydatetime(), x))
+        assert len(segment_tail15(pts)) == len(pts)                    # the research segment is one 15-min run
+        heads, loud, _ = flags15(x)
+        assert np.array_equal(heads, S.alert20_15(x))
+        assert np.array_equal(loud, B_ARMS["B2_two"](x))
+        n += len(x)
+    assert n > 40000
 
 
 def test_fast_fall_from_above_100_gets_loud():
