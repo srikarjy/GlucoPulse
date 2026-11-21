@@ -4,9 +4,9 @@ psycopg2-binary==2.9.13
 scikit-learn==1.9.1
 torch==2.15.0
 pytorch-lightning==2.6.6
-pytorch-forecasting==1.1.1
+pytorch-forecasting==1.8.0
 onnx==1.23.2
-onnxruntime==1.31.1
-fastapi==0.162.4
+onnxruntime==1.32.0
+fastapi==0.163.2
 uvicorn==0.54.0
 httpx==0.28.1
