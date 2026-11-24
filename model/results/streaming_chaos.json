@@ -1,0 +1,95 @@
+{
+  "when": "2026-11-24T23:42:37+00:00",
+  "seed": 2026,
+  "all_ok": true,
+  "scenarios": [
+    {
+      "scenario": "duplicates",
+      "ok": true,
+      "people": {
+        "cgmacros-007-r1": {
+          "messages": 3650,
+          "expected": 6,
+          "stored": 6,
+          "missing": 0,
+          "extra": 0,
+          "unpublished": 0
+        }
+      },
+      "seconds_to_settle": 16.1
+    },
+    {
+      "scenario": "reorder",
+      "ok": true,
+      "people": {
+        "cgmacros-008-r1": {
+          "messages": 2861,
+          "expected": 73,
+          "stored": 73,
+          "missing": 0,
+          "extra": 0,
+          "unpublished": 0
+        }
+      },
+      "seconds_to_settle": 19.7,
+      "late_readings": 258,
+      "alerts_differing_from_sorted_order": 6
+    },
+    {
+      "scenario": "gap",
+      "ok": true,
+      "people": {
+        "cgmacros-009-r1": {
+          "messages": 2854,
+          "expected": 24,
+          "stored": 24,
+          "missing": 0,
+          "extra": 0,
+          "unpublished": 0
+        }
+      },
+      "seconds_to_settle": 19.5
+    },
+    {
+      "scenario": "garbage",
+      "ok": true,
+      "people": {
+        "cgmacros-012-r1": {
+          "messages": 2865,
+          "expected": 45,
+          "stored": 45,
+          "missing": 0,
+          "extra": 0,
+          "unpublished": 0
+        }
+      },
+      "seconds_to_settle": 19.2
+    },
+    {
+      "scenario": "kill",
+      "ok": true,
+      "people": {
+        "cgmacros-010-r1": {
+          "messages": 2856,
+          "expected": 63,
+          "stored": 63,
+          "missing": 0,
+          "extra": 0,
+          "unpublished": 0
+        },
+        "cgmacros-011-r1": {
+          "messages": 2856,
+          "expected": 24,
+          "stored": 24,
+          "missing": 0,
+          "extra": 0,
+          "unpublished": 0
+        }
+      },
+      "seconds_to_settle": 62.8,
+      "alerts_stored_when_killed": 46
+    }
+  ],
+  "topic_messages_added": 235,
+  "topic_unique_alert_ids_added": 235
+}

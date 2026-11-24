@@ -79,6 +79,29 @@ counters print every 60 s.
 - After `docker kill`, Kafka hands the partitions back only when the dead member's session times out (~45 s); alerts
   for that period arrive late, not lost.
 
+## Chaos run (scripted, `scripts/chaos_streaming.py`)
+
+Each scenario streams real CGMacros people into the running stack with a fault. The expected answer is `AlertStream`
+run offline on exactly the same messages in the same arrival order. Run 2026-11-24 (seed 2026, ids suffixed `-r1`),
+results in `model/results/streaming_chaos.json`:
+
+| Scenario | Person | Messages | Expected = stored | Missing / extra / unpublished | Settled in |
+|---|---|---|---|---|---|
+| Every reading sent twice | 007 | 3,650 | 6 = 6 | 0 / 0 / 0 | 16 s |
+| ~10% of readings one step late (258) | 008 | 2,861 | 73 = 73 | 0 / 0 / 0 | 20 s |
+| 20 minutes missing | 009 | 2,854 | 24 = 24 | 0 / 0 / 0 | 20 s |
+| Broken JSON, 12 and 900 mg/dL, a 2099 timestamp, a bad time mixed in | 012 | 2,865 | 45 = 45 | 0 / 0 / 0 | 19 s |
+| `docker kill` 4 s in (46 alerts stored), restart | 010, 011 | 5,712 | 63 + 24 = 87 | 0 / 0 / 0 | 63 s (Kafka session timeout) |
+
+The topic gained 235 messages for 235 unique `alert_id`s in this run (no re-send was needed).
+
+**Finding: late readings cost alerts.** With 258 readings arriving one step late, cgmacros-008 got 73 alerts instead of
+the 79 the same data gives in time order: 6 alerts (8%) never fired, none were added. By design a late reading cannot
+raise an alert (so nothing is ever said about the past), but the reading that arrived before it was already judged
+with a hole in its history, which breaks the trend, and that decision is not revisited. The service does exactly what
+it was designed to do here; the design itself loses alerts when data is only minutes late. A possible fix (re-decide
+the newest reading when a late reading fills a hole right before it) changes the alert semantics and is not built.
+
 A plain `evaluate(last 2 hours)` per reading also matched on this whole-number data; it diverged only on a constructed
 5-hour creep toward 70 with decimal values (3 of 6 alerts). The explicit per-tier state avoids that case.
 
@@ -87,6 +110,7 @@ A plain `evaluate(last 2 hours)` per reading also matched on this whole-number d
 - Replays are of 2020 data, so the "too old to page" check is off by default; set `--max-age-min` for live use.
 - Changing the number of `cgm-raw` partitions moves people between partitions and invalidates the checkpoints;
   delete `alert_checkpoints` rows and replay from the start if that is ever done.
+- Late readings are never re-decided, so minutes-late data loses alerts (6 of 79 in the chaos run, above).
 - Each person must stay on one partition; the producer keys messages by patient id, which guarantees it.
 - Naive timestamps are treated as UTC. CGMacros clock times are date-shifted and sent unchanged, so alert timing is
   right but the stored time zone is nominal.
