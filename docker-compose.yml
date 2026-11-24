@@ -39,6 +39,7 @@ services:
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic cgm-dlq --partitions 1 --replication-factor 1
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic cgm-parse-errors --partitions 1 --replication-factor 1
         /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic cgm-implausible --partitions 1 --replication-factor 1
+        /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic cgm-alerts --partitions 3 --replication-factor 1
 
   timescaledb:
     image: timescale/timescaledb:2.16.1-pg16
@@ -95,6 +96,22 @@ services:
     volumes:
       - "./data/azt1d/extracted/AZT1D 2025/CGM Records:/data:ro"
       - "./data/stream:/stream:ro"            # CGMacros exports: --source csv --data-dir /stream
+
+  alerts:
+    build:
+      context: .
+      dockerfile: consumer/Dockerfile.alerts
+    container_name: glucopulse-alerts
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    depends_on:
+      kafka-init:
+        condition: service_completed_successfully
+      timescaledb:
+        condition: service_healthy
 
   consumer:
     build: ./consumer
