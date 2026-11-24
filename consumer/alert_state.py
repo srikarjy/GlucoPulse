@@ -124,6 +124,24 @@ class AlertStream:
         return "alert", self._alert(patient_id, datetime.fromisoformat(now["timestamp"]), now["tier"], now["glucose"],
                                     now["projected_20min"], mode)
 
+    def snapshot(self, patients: set[str] | None = None) -> dict:
+        """JSON-safe copy of the memory (all people, or only `patients`), for a checkpoint."""
+        def iso(t: datetime | None) -> str | None:
+            return t.isoformat() if t else None
+        return {pid: {"readings": [[t.isoformat(), g] for t, g in p.readings], "mode": p.mode,
+                      "newest_seg_time": iso(p.newest_seg_time), "last": {k: iso(v) for k, v in p.last.items()}}
+                for pid, p in self.people.items() if patients is None or pid in patients}
+
+    def restore(self, saved: dict) -> None:
+        """Load people from a snapshot (replacing those people's memory, leaving others untouched). Each person lives
+        in exactly one Kafka partition because the producer keys messages by patient id."""
+        def dt(s: str | None) -> datetime | None:
+            return datetime.fromisoformat(s) if s else None
+        for pid, d in saved.items():
+            self.people[pid] = _Person(readings=[(datetime.fromisoformat(t), float(g)) for t, g in d["readings"]],
+                                       mode=d["mode"], newest_seg_time=dt(d["newest_seg_time"]),
+                                       last={k: dt(v) for k, v in d["last"].items()})
+
     @staticmethod
     def _alert(patient_id: str, t: datetime, tier: str, glucose: float, projected: float, mode: int) -> dict:
         return {"patient_id": patient_id, "time": t, "tier": tier,

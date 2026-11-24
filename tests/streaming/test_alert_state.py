@@ -126,3 +126,32 @@ def test_slow_creep_toward_a_limit_with_decimal_values():
     got = stream_alerts(rows)
     assert got == batch_alerts(rows)
     assert len(got) == 6
+
+
+def test_snapshot_restore_mid_stream_gives_identical_alerts():
+    """A restart that loads a checkpoint must make exactly the decisions an uninterrupted run makes."""
+    import json
+    path = ROOT / "data" / "stream" / "cgmacros-001.csv"
+    if path.exists():
+        rows = [(datetime.fromisoformat(r["timestamp"]), float(r["glucose"])) for r in csv.DictReader(path.open())]
+    else:
+        rows = series([120, 112, 104, 96, 88, 80, 76, 74, 75, 90, 120, 160, 200, 230, 245, 249] * 20)
+    full = stream_alerts(rows)
+    for cut in (7, len(rows) // 3, len(rows) // 2 + 1):
+        s = AlertStream()
+        first = [a for _, a in (s.process("p", t, g) for t, g in rows[:cut]) if a]
+        saved = json.loads(json.dumps(s.snapshot()))          # through JSON, as the checkpoint table stores it
+        s2 = AlertStream()
+        s2.restore(saved)
+        rest = [a for _, a in (s2.process("p", t, g) for t, g in rows[cut:]) if a]
+        assert [(a["time"], a["tier"]) for a in first + rest] == full
+
+
+def test_snapshot_can_select_people():
+    s = AlertStream()
+    s.process("a", T0, 100)
+    s.process("b", T0, 100)
+    assert set(s.snapshot({"a"})) == {"a"}
+    s2 = AlertStream()
+    s2.restore(s.snapshot({"b"}))
+    assert set(s2.people) == {"b"}
