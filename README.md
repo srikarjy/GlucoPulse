@@ -20,6 +20,7 @@ GlucoPulse moves continuous glucose monitor data from sensor to forecast reliabl
 | **Interoperability** | FHIR R4 facade (`Observation`, `Patient`, `$forecast`, `Provenance`, `AuditEvent`), SMART-scoped JWT auth that fails closed, and a hash-chained audit log. Round-trip tested against HAPI FHIR 7.4.0. |
 | **Clinical AI agent** | Drafts cited findings from FHIR data. Any sentence without a matching citation is dropped, and every draft goes to a human reviewer. The agent has no permission to approve its own output. |
 | **Glucose alerts (tested)** | A two-tier CGM trend alert, pre-registered and tested on 45 CGMacros adults plus 115 people from three external studies: 72% of lows (external) and 97% of highs (ShanghaiT2DM) warned >= 15 min ahead. Served by `POST /alerts` (docs/TRIAGE.md §9, §15-19). |
+| **Streaming alerts** | The same alert on every reading as it arrives: a Kafka consumer with checkpointed state and an outbox. Alerts match the batch rule exactly, and after a `docker kill` mid-replay it resumed with no lost alert (183 of 183 stored and published; delivery is at-least-once with a fixed alert id). See docs/STREAMING.md. |
 | **ChatGPT and Claude** | A public, read-only MCP server (`agents/public_mcp/`) so assistants can check a person's CGM readings. It is an OAuth resource server; errors never echo input; every answer says it is not for insulin dosing. See docs/AI_CONNECTORS.md. |
 
 ---
