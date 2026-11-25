@@ -39,6 +39,10 @@ readings are skipped here; `ingest.py` routes them to the error topics.
 | The 30-min quiet period across a restart | Same decisions as an uninterrupted run | The quiet period is a chain of earlier alerts, so last-alert times per tier are part of the saved memory (`consumer/alert_state.py`) |
 | A late or out-of-order reading | Used for later trends, never an alert about the past | Only a person's newest reading can alert |
 
+Each message's `projected_20min` is capped to the 40-400 mg/dL sensor range with `projection_capped: true` when the
+straight line ran past it, as the MCP tool reports it (a live demo on 2 Feb of cgmacros-008 showed -1, 29 and 35 mg/dL
+before this cap; `glucose_alerts` keeps the raw value).
+
 Delivery to `cgm-alerts` is at-least-once; each message has a fixed `alert_id` (`patient|time|tier`) so a consumer can
 drop a repeat.
 

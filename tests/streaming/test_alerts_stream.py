@@ -212,6 +212,18 @@ def test_alert_message_is_self_describing():
     m = alert_message(a)
     assert m["alert_id"] == "cgmacros-001|2026-01-01T08:00:00+00:00|loud"
     assert m["time"].endswith("+00:00") and "meter" in m["disclaimer"]
+    assert (m["projected_20min"], m["projection_capped"]) == (60.0, False)
+
+
+@pytest.mark.parametrize("raw, shown, capped", [(-1.0, 40.0, True), (39.9, 40.0, True), (40.0, 40.0, False),
+                                                (255.0, 255.0, False), (400.0, 400.0, False), (451.0, 400.0, True)])
+def test_published_projection_is_capped_to_the_sensor_range(raw, shown, capped):
+    """Seen in the live demo: a fast fall projected -1 mg/dL. Sensors read 40-400, as the MCP tool already reports."""
+    a = {"patient_id": "cgmacros-008", "time": T0, "tier": "loud", "direction": "low" if raw < 70 else "high",
+         "glucose": 76.0, "projected_20min": raw, "spacing_min": 5}
+    m = alert_message(a)
+    assert (m["projected_20min"], m["projection_capped"]) == (shown, capped)
+    assert a["projected_20min"] == raw                  # the stored record keeps the raw value
 
 
 # --- review findings (ecc python-reviewer + silent-failure-hunter, 2026-11-24) -----------------------------------

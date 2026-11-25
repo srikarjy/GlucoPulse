@@ -72,10 +72,19 @@ def alert_id(a: dict) -> str:
     return f"{a['patient_id']}|{utc(a['time']).isoformat()}|{a['tier']}"
 
 
+SENSOR_RANGE = (40.0, 400.0)       # CGM sensors report 40-400 mg/dL; same cap as the MCP tool (agents/public_mcp)
+
+
 def alert_message(a: dict) -> dict:
+    """The published alert. The straight-line projection can run past what a sensor can read (e.g. -1 mg/dL on a fast
+    fall), so it is capped to 40-400 with `projection_capped` set, as the MCP tool does; glucose_alerts keeps the raw
+    value as the internal record."""
+    raw = float(a["projected_20min"])
+    projected = min(max(raw, SENSOR_RANGE[0]), SENSOR_RANGE[1])
     return {"alert_id": alert_id(a), "patient_id": a["patient_id"], "time": utc(a["time"]).isoformat(),
             "tier": a["tier"], "direction": a["direction"], "glucose": a["glucose"],
-            "projected_20min": a["projected_20min"], "spacing_min": a["spacing_min"], "disclaimer": DISCLAIMER}
+            "projected_20min": projected, "projection_capped": projected != raw,
+            "spacing_min": a["spacing_min"], "disclaimer": DISCLAIMER}
 
 
 class Store(Protocol):
