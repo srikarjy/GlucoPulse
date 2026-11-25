@@ -80,6 +80,36 @@ def rows_are_identical(rows: list) -> bool:
     return len({tuple(sorted(r.items())) for r in rows}) == 1
 
 
+def load_stream_csv(data_dir: Path, patient: str):
+    """A plain `timestamp,glucose` file from scripts/export_stream_csv.py (CGMacros Dexcom, adults not on insulin).
+    Same return shape as load_patient_rows: timestamp groups in file (chronological) order."""
+    csv_path = data_dir / f"{patient}.csv"
+    if not csv_path.exists():
+        raise FileNotFoundError(csv_path)
+    groups = {}
+    with csv_path.open(newline="") as f:
+        for row in csv.DictReader(f):
+            groups.setdefault(row["timestamp"], []).append(row)
+    return groups
+
+
+def cast_stream_row(raw_row: dict, patient: str) -> dict:
+    """Same message shape as cast_row, so the ingest consumer needs no change; there are no covariates."""
+    glucose = raw_row["glucose"]
+    return {
+        "patient_id": patient,
+        "event_datetime": raw_row["timestamp"],
+        "cgm": float(glucose) if glucose not in ("", None) else None,
+        "device_mode": None,
+        "bolus_type": None,
+        "basal": None,
+        "correction_delivered": None,
+        "total_bolus_insulin_delivered": None,
+        "food_delivered": None,
+        "carb_size": None,
+    }
+
+
 def delivery_report(err, msg):
     if err is not None:
         print(f"DELIVERY FAILED: {err}", file=sys.stderr)
@@ -87,7 +117,10 @@ def delivery_report(err, msg):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--patient", required=True, help="Subject number, e.g. 1")
+    parser.add_argument("--patient", required=True,
+                        help="azt1d: subject number, e.g. 1; csv: file stem, e.g. cgmacros-001")
+    parser.add_argument("--source", choices=["azt1d", "csv"], default="azt1d",
+                        help="csv = timestamp,glucose files from scripts/export_stream_csv.py")
     parser.add_argument("--mode", required=True, choices=["bulk", "live"])
     parser.add_argument("--hours", type=float, default=6.0, help="live mode only: replay this many hours from the start of the file")
     parser.add_argument("--data-dir", default="/data", help="Path to the CGM Records directory")
@@ -97,7 +130,13 @@ def main():
     args = parser.parse_args()
 
     data_dir = Path(args.data_dir)
-    groups, glucose_col = load_patient_rows(data_dir, args.patient)
+    if args.source == "csv":
+        groups = load_stream_csv(data_dir, args.patient)
+        cast = lambda row: cast_stream_row(row, args.patient)  # noqa: E731
+        glucose_col = "glucose"
+    else:
+        groups, glucose_col = load_patient_rows(data_dir, args.patient)
+        cast = lambda row: cast_row(row, glucose_col, args.patient)  # noqa: E731
     print(f"Loaded {sum(len(v) for v in groups.values())} rows, {len(groups)} distinct timestamps "
           f"for patient {args.patient} (glucose column: {glucose_col})")
 
@@ -121,7 +160,7 @@ def main():
         key = args.patient.encode()
 
         if len(rows) == 1 or rows_are_identical(rows):
-            message = cast_row(rows[0], glucose_col, args.patient)
+            message = cast(rows[0])
             producer.produce(args.raw_topic, key=key, value=json.dumps(message).encode(), callback=delivery_report)
             sent_raw += 1
         else:

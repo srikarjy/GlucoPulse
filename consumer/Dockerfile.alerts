@@ -1,0 +1,15 @@
+# Streaming alert consumer (consumer/alerts_stream.py). Built from the repo root because it needs the tested alert
+# rule in serving/alerts.py; only the three Python files it uses are copied in.
+FROM python:3.12-slim
+
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+COPY consumer/requirements-alerts.txt .
+RUN pip install --no-cache-dir -r requirements-alerts.txt
+
+COPY serving/__init__.py serving/alerts.py serving/
+COPY consumer/alert_state.py consumer/alerts_stream.py consumer/
+
+ENTRYPOINT ["python", "-m", "consumer.alerts_stream"]

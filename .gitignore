@@ -24,3 +24,4 @@ logs/
 .coverage
 .codex/
 video/
+data/stream/

@@ -5,9 +5,9 @@ name: glucopulse-ci
 on:
   push:
     branches: [main]
-    paths: ["agents/**", "serving/**", "ehr/**", "sources/**", "model/cgmacros/**", "tests/healthcare/**", "tests/agents/**", "tests/sources/**", "requirements-ci.txt", ".github/workflows/glucopulse-ci.yml"]
+    paths: ["agents/**", "serving/**", "ehr/**", "sources/**", "model/cgmacros/**", "tests/healthcare/**", "tests/agents/**", "tests/sources/**", "consumer/**", "producer/**", "scripts/export_stream_csv.py", "tests/streaming/**", "requirements-ci.txt", ".github/workflows/glucopulse-ci.yml"]
   pull_request:
-    paths: ["agents/**", "serving/**", "ehr/**", "sources/**", "model/cgmacros/**", "tests/healthcare/**", "tests/agents/**", "tests/sources/**", "requirements-ci.txt", ".github/workflows/glucopulse-ci.yml"]
+    paths: ["agents/**", "serving/**", "ehr/**", "sources/**", "model/cgmacros/**", "tests/healthcare/**", "tests/agents/**", "tests/sources/**", "consumer/**", "producer/**", "scripts/export_stream_csv.py", "tests/streaming/**", "requirements-ci.txt", ".github/workflows/glucopulse-ci.yml"]
 permissions: { contents: read }
 concurrency: { group: "glucopulse-${{ github.ref }}", cancel-in-progress: true }
 
@@ -20,7 +20,7 @@ jobs:
         with: { python-version: "3.12" }
       - run: pip install "ruff>=0.6"
       # Correctness rules only (pyflakes, syntax errors, bugbear).
-      - run: ruff check --select F,E9,B --ignore B008,B905 --target-version py312 agents serving/healthcare ehr sources model/cgmacros tests/healthcare tests/agents tests/sources tests/model_cgmacros
+      - run: ruff check --select F,E9,B --ignore B008,B905 --target-version py312 agents serving/healthcare ehr sources model/cgmacros tests/healthcare tests/agents tests/sources tests/model_cgmacros consumer tests/streaming
 
   healthcare:
     runs-on: ubuntu-latest
@@ -41,3 +41,14 @@ jobs:
       - run: pip install -r priorauth/requirements.txt -r priorauth/requirements-dev.txt
       - name: Agent tests + 20-patient eval harness (scripted model, no API keys)
         run: pytest tests/agents -q -s
+
+  streaming:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with: { python-version: "3.12" }
+      - run: pip install -r consumer/requirements-alerts.txt pytest
+      # Streaming alert state + consumer logic (outbox, checkpoints, crash recovery) with in-memory fakes. Tests that
+      # need the CGMacros export (data/stream/, not in the repo) skip themselves.
+      - run: pytest tests/streaming -q

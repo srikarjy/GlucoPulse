@@ -8,3 +8,6 @@ tests/
 model/lightning_logs/
 model/artifacts/checkpoints/
 model/artifacts/training_dataset.pkl
+video/
+.venv-*/
+**/node_modules/
