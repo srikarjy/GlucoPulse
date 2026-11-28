@@ -7,6 +7,6 @@ pytorch-lightning==2.6.6
 pytorch-forecasting==1.8.0
 onnx==1.23.2
 onnxruntime==1.32.0
-fastapi==0.163.2
+fastapi==0.165.0
 uvicorn==0.54.0
 httpx==0.28.1
