@@ -1,4 +1,4 @@
 # Additional to priorauth/requirements.txt (strands-agents, mcp) in the
 # shared .venv-pa -- this file only lists what agents/ needs on top of that.
 anthropic>=2.8.0,<3.0.0
-openai>=3.49.0,<4.0.0
+openai>=3.59.0,<4.0.0
