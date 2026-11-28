@@ -3,7 +3,7 @@ uvicorn==0.54.0
 httpx==0.28.1
 pydantic==2.14.3
 pyjwt[crypto]>=2.15.1
-mcp==1.30.0
+mcp==2.3.0
 strands-agents==1.65.0
 anthropic>=2.8.0,<3.0.0
 openai>=3.49.0,<4.0.0
