@@ -2,4 +2,4 @@
 # Research and app dependencies live in requirements-ci.txt, priorauth/requirements.txt and serving/requirements.txt.
 mcp==1.30.0
 pyjwt[crypto]==2.15.1
-numpy==2.5.4
+numpy==2.5.5
